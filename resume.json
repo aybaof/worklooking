@@ -2,7 +2,7 @@
   "basics": {
     "name": "Aymeric Barakat",
     "label": "Développeur full-stack",
-    "image": "",
+    "image": "https://github.com/aybaof/hosting_public/blob/main/assets/profil.jpg",
     "email": "aymeric.barakat@gmail.com",
     "phone": "0749627039",
     "summary": "Développeur full-stack avec plus de 4 ans d'expérience dans un contexte de grande entreprise. Doté d'une forte polyvalence technique (React, .NET, Node.js, Azure), j'assume les différents rôles inhérents à la conception de produits informatiques : développement, architecture, intégration et DevOps.",
