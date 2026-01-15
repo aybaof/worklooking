@@ -5,7 +5,6 @@
     "image": "",
     "email": "aymeric.barakat@gmail.com",
     "phone": "0749627039",
-    "birthDate": "1994-04-18",
     "summary": "Développeur full-stack avec plus de 4 ans d'expérience dans un contexte de grande entreprise. Doté d'une forte polyvalence technique (React, .NET, Node.js, Azure), j'assume les différents rôles inhérents à la conception de produits informatiques : développement, architecture, intégration et DevOps.",
     "location": {
       "city": "Paris",
@@ -84,15 +83,31 @@
   "skills": [
     {
       "name": "Frontend",
-      "keywords": ["React", "TypeScript", "jQuery", "Electron"]
+      "keywords": [
+        "React",
+        "TypeScript",
+        "jQuery",
+        "Electron"
+      ]
     },
     {
       "name": "Backend",
-      "keywords": [".NET", "SpringBoot", "Node.js", "PHP"]
+      "keywords": [
+        ".NET",
+        "SpringBoot",
+        "Node.js",
+        "PHP"
+      ]
     },
     {
       "name": "Cloud & DevOps",
-      "keywords": ["Azure", "Docker", "Git", "CI/CD", "Azure DevOps"]
+      "keywords": [
+        "Azure",
+        "Docker",
+        "Git",
+        "CI/CD",
+        "Azure DevOps"
+      ]
     }
   ],
   "languages": [
