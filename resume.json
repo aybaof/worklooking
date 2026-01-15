@@ -5,7 +5,8 @@
     "image": "https://raw.githubusercontent.com/aybaof/hosting_public/main/assets/profil.jpg",
     "email": "aymeric.barakat@gmail.com",
     "phone": "0749627039",
-    "summary": "Développeur full-stack avec plus de 4 ans d'expérience dans un contexte de grande entreprise. Doté d'une forte polyvalence technique (React, .NET, Node.js, Azure), j'assume les différents rôles inhérents à la conception de produits informatiques : développement, architecture, intégration et DevOps.",
+    "birthDate": "1994-04-18",
+    "summary": "Développeur full-stack avec plus de 4 ans d'expérience, polyvalent sur des stacks variées (Java/Spring, .NET, React, Node.js). Expérimenté dans les environnements cloud Azure et les architectures microservices, j'interviens sur l'ensemble du cycle de développement : conception, architecture, CI/CD et déploiement. Habitué au travail en équipe Agile et aux revues de code collaboratives.",
     "location": {
       "city": "Paris",
       "countryCode": "FR",
@@ -26,13 +27,11 @@
       "location": "Paris",
       "startDate": "2023-12-01",
       "highlights": [
-        "Développement d'interface de flux de données inter-systèmes via une plateforme iPaaS (plugins Node.js) et des applications .NET",
-        "Collaboration active avec l'équipe via Git (GitLab, puis migration vers Azure DevOps), incluant la mise en place de pipelines CI/CD",
-        "Mise en place et déploiement d'Azure Container Apps pour l'hébergement de microservices dans un environnement cloud scalable",
-        "Participation aux décisions d'architecture logicielle, notamment autour de l'orchestration des flux et de l'usage avancé d'Azure Service Bus",
-        "Contribution à la définition de conventions de logging unifiées sur Azure Application Insights, améliorant la visibilité des flux et leur supervision",
-        "Mise en place d'alertes Azure (techniques et fonctionnelles), intégrées aux processus métier",
-        "Interventions sur l'analyse et la compréhension des données, notamment sur les intégrations entre les systèmes RH et finance",
+        "Développement d'interfaces de flux de données inter-systèmes (CRM, Finance, RH, Paie) via une plateforme iPaaS (plugins Node.js) et des applications .NET, gérant 10M+ interactions/mois",
+        "Mise en place et déploiement de microservices sur Azure Container Apps, avec orchestration via Azure Service Bus dans un environnement cloud scalable",
+        "Collaboration au sein d'une équipe internationale (France/Hongrie, 10+ développeurs), incluant la migration GitLab vers Azure DevOps et la mise en place de pipelines CI/CD",
+        "Contribution à l'architecture logicielle et définition de conventions de logging unifiées sur Azure Application Insights, avec alerting intégré à Microsoft Teams",
+        "Interventions sur l'analyse des données et intégrations entre systèmes RH et Finance",
         "Support technique sur un projet de bot support Copilot Studio : intégration Teams et accompagnement DevOps"
       ]
     },
@@ -43,10 +42,11 @@
       "startDate": "2023-01-01",
       "endDate": "2023-12-01",
       "highlights": [
-        "Conception et maintenance d'API SpringBoot et développement d'interfaces web React",
-        "Analyse des besoins métiers, proposition de solutions techniques et participation active à l'élaboration des besoins",
-        "Collaboration agile, participation aux revues de code et échanges techniques réguliers",
-        "Déploiements via des outils DevOps (OpenShift / CloudBees) et coordination avec les équipes concernées"
+        "Développement full-stack d'une nouvelle application d'assurance (React/Redux, SpringBoot) en remplacement d'un système legacy, au sein d'une équipe de 50+ personnes",
+        "Conception d'interfaces React avancées : formulaires dynamiques pour propositions d'assurance, tarification dynamique et gestion d'état Redux",
+        "Membre de l'équipe API (15+ personnes, 7-8 développeurs) : conception et maintenance d'API SpringBoot",
+        "Maintenance corrective sur application legacy et génération de documents d'assurance habitation",
+        "Collaboration Scrum (sprints mensuels), revues de code régulières et déploiements via OpenShift/CloudBees"
       ]
     },
     {
@@ -56,9 +56,9 @@
       "startDate": "2021-12-01",
       "endDate": "2022-12-01",
       "highlights": [
-        "Développement d'interface web en utilisant jQuery et/ou Electron",
-        "Conception et développement d'API via un framework PHP interne",
-        "Mise en place d'un Git-flow structuré et d'un environnement de développement basé sur Docker"
+        "Développement d'applications web variées (CRM, point de vente, commande alimentaire) en jQuery, Electron et PHP/Laravel",
+        "Migration technique du framework PHP legacy vers Laravel et introduction de Docker dans l'équipe",
+        "Mise en place d'un Git-flow structuré, améliorant le travail collaboratif de l'équipe"
       ]
     }
   ],
@@ -78,36 +78,36 @@
       "location": "Saint-Pierre",
       "startDate": "2021-01-01",
       "endDate": "2021-08-01"
+    },
+    {
+      "institution": "Lycée Evariste Galois",
+      "area": "Baccalauréat Scientifique",
+      "studyType": "Bac S",
+      "location": "Noisy-le-Grand",
+      "startDate": "2012-09-01",
+      "endDate": "2013-06-01"
     }
   ],
   "skills": [
     {
       "name": "Frontend",
-      "keywords": [
-        "React",
-        "TypeScript",
-        "jQuery",
-        "Electron"
-      ]
+      "keywords": ["React", "Redux", "TypeScript", "Next.js", "Tailwind CSS", "Bootstrap"]
     },
     {
       "name": "Backend",
-      "keywords": [
-        ".NET",
-        "SpringBoot",
-        "Node.js",
-        "PHP"
-      ]
+      "keywords": ["SpringBoot", ".NET", "Node.js/Express", "REST API"]
+    },
+    {
+      "name": "Bases de données",
+      "keywords": ["PostgreSQL", "MySQL", "Oracle"]
     },
     {
       "name": "Cloud & DevOps",
-      "keywords": [
-        "Azure",
-        "Docker",
-        "Git",
-        "CI/CD",
-        "Azure DevOps"
-      ]
+      "keywords": ["Azure", "Docker", "Git", "CI/CD", "Jenkins", "Azure DevOps"]
+    },
+    {
+      "name": "Méthodologies",
+      "keywords": ["Agile/Scrum", "Code Review"]
     }
   ],
   "languages": [
@@ -122,10 +122,10 @@
   ],
   "interests": [
     {
-      "name": "Boxe"
+      "name": "Boxe anglaise"
     },
     {
-      "name": "Gastronomie"
+      "name": "Cuisine & Gastronomie"
     }
   ],
   "meta": {
