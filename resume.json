@@ -1,143 +1,119 @@
 {
   "basics": {
-    "name": "Thomas Edison",
-    "label": "Inventor and Businessman",
-    "picture": "https://example.com/photo.jpg",
-    "email": "thomas.edison@example.com",
-    "phone": "(123) 456-7890",
-    "url": "https://thomasedison.com",
-    "summary": "Prolific inventor and businessman known for developing many devices that greatly influenced life around the world, including the phonograph, the motion picture camera, and the electric light bulb.",
+    "name": "Aymeric Barakat",
+    "label": "Développeur full-stack",
+    "image": "",
+    "email": "aymeric.barakat@gmail.com",
+    "phone": "0749627039",
+    "birthDate": "1994-04-18",
+    "summary": "Développeur full-stack avec plus de 4 ans d'expérience dans un contexte de grande entreprise. Doté d'une forte polyvalence technique (React, .NET, Node.js, Azure), j'assume les différents rôles inhérents à la conception de produits informatiques : développement, architecture, intégration et DevOps.",
     "location": {
-      "address": "Menlo Park",
-      "postalCode": "12345",
-      "city": "Edison",
-      "countryCode": "US",
-      "region": "New Jersey"
+      "city": "Paris",
+      "countryCode": "FR",
+      "region": "Île-de-France"
     },
     "profiles": [
       {
         "network": "LinkedIn",
-        "username": "thomasedison",
-        "url": "https://www.linkedin.com/in/thomasedison"
-      },
-      {
-        "network": "Twitter",
-        "username": "realThomasEdison",
-        "url": "https://twitter.com/realThomasEdison"
+        "username": "ayba",
+        "url": "https://www.linkedin.com/in/ayba"
       }
     ]
   },
   "work": [
     {
-      "company": "Edison Electric Light Company",
-      "position": "Founder",
-      "url": "https://edison.com",
-      "startDate": "1878-01-01",
-      "endDate": "1931-10-18",
-      "summary": "Founded the company that brought electric light to households and businesses.",
+      "name": "Galileo Global Education",
+      "position": "Ingénieur en développement",
+      "location": "Paris",
+      "startDate": "2023-12-01",
       "highlights": [
-        "Invented the first commercially practical incandescent light bulb.",
-        "Developed the electric power distribution system."
+        "Développement d'interface de flux de données inter-systèmes via une plateforme iPaaS (plugins Node.js) et des applications .NET",
+        "Collaboration active avec l'équipe via Git (GitLab, puis migration vers Azure DevOps), incluant la mise en place de pipelines CI/CD",
+        "Mise en place et déploiement d'Azure Container Apps pour l'hébergement de microservices dans un environnement cloud scalable",
+        "Participation aux décisions d'architecture logicielle, notamment autour de l'orchestration des flux et de l'usage avancé d'Azure Service Bus",
+        "Contribution à la définition de conventions de logging unifiées sur Azure Application Insights, améliorant la visibilité des flux et leur supervision",
+        "Mise en place d'alertes Azure (techniques et fonctionnelles), intégrées aux processus métier",
+        "Interventions sur l'analyse et la compréhension des données, notamment sur les intégrations entre les systèmes RH et finance",
+        "Support technique sur un projet de bot support Copilot Studio : intégration Teams et accompagnement DevOps"
       ]
     },
     {
-      "company": "General Electric",
-      "position": "Co-Founder",
-      "url": "https://ge.com",
-      "startDate": "1892-01-01",
-      "endDate": "1931-10-18",
-      "summary": "Co-founded General Electric, one of the largest and most diversified industrial corporations in the world.",
+      "name": "Inetum",
+      "position": "Développeur fullstack",
+      "location": "Niort",
+      "startDate": "2023-01-01",
+      "endDate": "2023-12-01",
       "highlights": [
-        "Played a key role in the development of electrical power and lighting systems.",
-        "Contributed to the advancement of numerous technological innovations."
+        "Conception et maintenance d'API SpringBoot et développement d'interfaces web React",
+        "Analyse des besoins métiers, proposition de solutions techniques et participation active à l'élaboration des besoins",
+        "Collaboration agile, participation aux revues de code et échanges techniques réguliers",
+        "Déploiements via des outils DevOps (OpenShift / CloudBees) et coordination avec les équipes concernées"
       ]
-    }
-  ],
-  "volunteer": [
+    },
     {
-      "organization": "Menlo Park Laboratory",
-      "position": "Lead Researcher",
-      "url": "https://menloparklab.com",
-      "startDate": "1876-01-01",
-      "endDate": "1931-10-18",
-      "summary": "Conducted research and experiments leading to numerous patents and innovations.",
+      "name": "Nixia System",
+      "position": "Développeur Web",
+      "location": "La Réunion",
+      "startDate": "2021-12-01",
+      "endDate": "2022-12-01",
       "highlights": [
-        "Developed the phonograph, a device for recording and reproducing sound.",
-        "Invented the motion picture camera, contributing to the birth of the film industry."
+        "Développement d'interface web en utilisant jQuery et/ou Electron",
+        "Conception et développement d'API via un framework PHP interne",
+        "Mise en place d'un Git-flow structuré et d'un environnement de développement basé sur Docker"
       ]
     }
   ],
   "education": [
     {
-      "institution": "Self-Taught",
-      "area": "Various fields of science and technology",
-      "studyType": "Self-Education",
-      "startDate": "1859-01-01",
-      "endDate": "1931-10-18",
-      "gpa": "",
-      "courses": [
-        "Electrical Engineering",
-        "Mechanical Engineering",
-        "Chemistry"
-      ]
-    }
-  ],
-  "awards": [
+      "institution": "Openclassroom",
+      "area": "Développement Web",
+      "studyType": "RNCP 5",
+      "location": "La Réunion",
+      "startDate": "2021-12-01",
+      "endDate": "2022-12-01"
+    },
     {
-      "title": "Congressional Gold Medal",
-      "date": "1928-01-01",
-      "awarder": "United States Congress",
-      "summary": "Awarded for distinguished achievements and contributions to society."
-    }
-  ],
-  "publications": [
-    {
-      "name": "Electric Light and Power",
-      "publisher": "Scientific American",
-      "releaseDate": "1880-01-01",
-      "url": "https://scientificamerican.com",
-      "summary": "A paper detailing the development and impact of electric light and power systems."
+      "institution": "IFR",
+      "area": "Webdesign",
+      "studyType": "Formation",
+      "location": "Saint-Pierre",
+      "startDate": "2021-01-01",
+      "endDate": "2021-08-01"
     }
   ],
   "skills": [
     {
-      "name": "Inventing",
-      "level": "Master",
-      "keywords": [
-        "Electricity",
-        "Sound Recording",
-        "Motion Pictures"
-      ]
+      "name": "Frontend",
+      "keywords": ["React", "TypeScript", "jQuery", "Electron"]
     },
     {
-      "name": "Entrepreneurship",
-      "level": "Expert",
-      "keywords": [
-        "Business Development",
-        "Product Innovation",
-        "Industrial Research"
-      ]
+      "name": "Backend",
+      "keywords": [".NET", "SpringBoot", "Node.js", "PHP"]
+    },
+    {
+      "name": "Cloud & DevOps",
+      "keywords": ["Azure", "Docker", "Git", "CI/CD", "Azure DevOps"]
     }
   ],
   "languages": [
     {
-      "language": "English",
-      "fluency": "Native speaker"
+      "language": "Français",
+      "fluency": "Langue maternelle"
+    },
+    {
+      "language": "Anglais",
+      "fluency": "Courant"
     }
   ],
   "interests": [
     {
-      "name": "Research and Development",
-      "keywords": [
-        "Innovations",
-        "Experimentation"
-      ]
+      "name": "Boxe"
+    },
+    {
+      "name": "Gastronomie"
     }
   ],
-  "references": [
-    {
-      "name": "Henry Ford",
-      "reference": "Thomas Edison was a brilliant inventor and a visionary businessman. His work has had a profound impact on the modern world."
-    }
-  ]
+  "meta": {
+    "theme": "sidebar"
+  }
 }
