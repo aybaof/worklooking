@@ -58,10 +58,15 @@ export default function App() {
     }
   };
 
-  const handleSend = async () => {
+  const handleSend = async (attachmentPath?: string) => {
     if (!input.trim() || !apiKey) return;
 
-    const userMessage: Message = { role: "user", content: input };
+    let messageContent = input;
+    if (attachmentPath) {
+      messageContent += `\n\n[Pièce jointe: ${attachmentPath}]`;
+    }
+
+    const userMessage: Message = { role: "user", content: messageContent };
     const updatedMessages = [...messages, userMessage];
 
     setMessages(updatedMessages);
@@ -82,6 +87,10 @@ export default function App() {
 
       if (response.error) {
         throw new Error(response.error);
+      }
+
+      if (response.updatedResume) {
+        localStorage.setItem("worklooking_resume", JSON.stringify(response.updatedResume, null, 2));
       }
 
       setMessages((prev) => [

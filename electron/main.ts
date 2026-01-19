@@ -2,8 +2,8 @@ import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog } from "electro
 import path from "path";
 import fs from "fs";
 import OpenAI from "openai";
+import { PDFParse } from "pdf-parse";
 import { tools } from "./agent/tools";
-import agentMd from "./agent/agent.md";
 import { GenerateSystemPrompt } from "./agent/prompt";
 
 // Paths configuration
@@ -84,6 +84,19 @@ async function fetchUrl(url: string) {
   }
 }
 
+async function readPdf(filePath: string) {
+  const fullPath = resolveFilePath(filePath);
+  if (!fs.existsSync(fullPath)) return { error: "File not found" };
+  try {
+    const parser = new PDFParse({ url: filePath })
+    const result = await parser.getText()
+    await parser.destroy()
+    return { success: true, text: result };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 async function generatePdf({ htmlPath, pdfPath }: PdfArgs) {
   const fullHtmlPath = resolveFilePath(htmlPath);
   const fullPdfPath = resolveFilePath(pdfPath);
@@ -136,6 +149,15 @@ ipcMain.handle("select-folder", async () => {
   return result.filePaths[0];
 });
 
+ipcMain.handle("select-file", async (_event, { filters }: { filters?: Electron.FileFilter[] } = {}) => {
+  const result = await dialog.showOpenDialog({
+    properties: ["openFile"],
+    filters: filters || [{ name: "All Files", extensions: ["*"] }],
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
+
 ipcMain.handle("read-file", async (_event, { filePath }: { filePath: string }) => {
   return await readFile({ filePath });
 });
@@ -168,6 +190,8 @@ ipcMain.handle("ai-chat", async (_event: IpcMainInvokeEvent, { messages, apiKey,
     const resumeSourceJson = resumeJson || "No source resume JSON provided.";
 
     const systemPrompt = GenerateSystemPrompt(configJson, resumeSourceJson);
+
+    let updatedResumeJson: any = null;
 
     let currentMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
@@ -206,6 +230,11 @@ ipcMain.handle("ai-chat", async (_event: IpcMainInvokeEvent, { messages, apiKey,
             result = await generatePdf(args);
           } else if (name === "fetch_url") {
             result = await fetchUrl(args.url);
+          } else if (name === "save_source_resume") {
+            updatedResumeJson = args.resumeJson;
+            result = { success: true, message: "Source resume updated in memory. It will be persisted by the frontend." };
+          } else if (name === "read_pdf") {
+            result = await readPdf(args.filePath);
           }
         } catch (e: any) {
           result = { error: e.message };
@@ -230,7 +259,10 @@ ipcMain.handle("ai-chat", async (_event: IpcMainInvokeEvent, { messages, apiKey,
       assistantMessage = response.choices[0].message;
     }
 
-    return { content: assistantMessage.content || "No content returned" };
+    return {
+      content: assistantMessage.content || "No content returned",
+      updatedResume: updatedResumeJson
+    };
   } catch (error: any) {
     return { error: error.message };
   }

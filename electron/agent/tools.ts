@@ -92,4 +92,38 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "save_source_resume",
+      description: "Sauvegarde le CV source principal. À utiliser uniquement pour le CV de base, pas pour les versions adaptées aux offres.",
+      parameters: {
+        type: "object",
+        properties: {
+          resumeJson: {
+            type: "object",
+            description: "Le contenu complet du CV au format JSON Resume.",
+          },
+        },
+        required: ["resumeJson"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_pdf",
+      description: "Extrait le texte d'un fichier PDF (ex: un CV existant).",
+      parameters: {
+        type: "object",
+        properties: {
+          filePath: {
+            type: "string",
+            description: "Chemin absolu vers le fichier PDF.",
+          },
+        },
+        required: ["filePath"],
+      },
+    },
+  },
 ];

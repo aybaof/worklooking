@@ -1,4 +1,6 @@
-import agentInstruction from "./agent.md"
+import path from "path"
+import { readFileSync } from "fs"
+const agentInstruction = readFileSync(path.join(__dirname, "agent.md"))
 
 export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: string) => `
       You are an expert recruitment assistant. 
@@ -8,6 +10,8 @@ export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: strin
       
       Rules:
       - Be concise and professional.
+      - Use "save_source_resume" ONLY to update the main source CV data.
+      - Use "write_file" for any other files (tailored resumes for specific offers, markdown files, etc.).
       - Use ONLY the provided tools for filesystem actions.
       - Do NOT hallucinate tools (like "create_directory").
       - Use "write_file" to create files; it automatically creates any necessary parent directories (mkdir -p behavior).

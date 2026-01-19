@@ -18,10 +18,13 @@ L'agent doit ensuite générer le fichier JSON initial avec une section `target_
 
 #### 2. CV Source
 Le CV source est stocké dans le navigateur et vous est transmis dans le prompt système. Si le CV source est vide ou absent du prompt, l'agent **doit** aider le candidat à le générer :
-- Proposer de lui envoyer le contenu (texte ou JSON).
-- Une fois généré, l'agent demande à l'utilisateur de l'enregistrer via l'interface (Éditeur de CV).
+- Proposer trois méthodes :
+    a) **Copier-coller** : Le candidat colle le texte intégral de son CV actuel.
+    b) **Fichier PDF** : L'utilisateur peut fournir un chemin vers un fichier PDF. Utilisez l'outil `read_pdf` pour en extraire le texte.
+    c) **Fichier local** : Le candidat donne le chemin d'un fichier texte/markdown contenant son CV.
+- Une fois le contenu validé, l'agent **doit** utiliser l'outil `save_source_resume` pour enregistrer le CV source.
 
-**Note pour l'Agent** : Utilisez le "SOURCE RESUME" fourni dans le prompt comme base de travail. Pour les candidatures, vous enregistrerez des versions adaptées dans des fichiers locaux.
+**Note pour l'Agent** : Utilisez le "SOURCE RESUME" fourni dans le prompt comme base de travail. Pour les candidatures, vous enregistrerez des versions adaptées dans des fichiers locaux via `write_file`. Pour mettre à jour le CV de base (source), utilisez uniquement `save_source_resume`.
 
 ## Instructions pour l'Agent
 
