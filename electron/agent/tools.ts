@@ -5,7 +5,7 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "read_file",
-      description: "Lit un fichier (ex: resume.json, candidature_config.json).",
+      description: "Lit un fichier local (ex: offre.md, notes.md).",
       parameters: {
         type: "object",
         properties: {
@@ -15,6 +15,23 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
           },
         },
         required: ["filePath"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_candidature_config",
+      description: "Sauvegarde la configuration globale de candidature (profil, objectifs, entreprises cibles, suivi). À utiliser pour toute modification du profil ou du suivi des candidatures.",
+      parameters: {
+        type: "object",
+        properties: {
+          config: {
+            type: "object",
+            description: "L'objet de configuration complet au format CandidatureConfig.",
+          },
+        },
+        required: ["config"],
       },
     },
   },

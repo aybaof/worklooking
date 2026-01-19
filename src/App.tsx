@@ -30,7 +30,45 @@ export default function App() {
   );
   const [userDataPath, setUserDataPath] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [activeTool, setActiveTool] = useState<{
+    name: string;
+    status: string;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onChatUpdate = (_event: any, data: { content: string }) => {
+      setMessages((prev) => {
+        const lastMsg = prev[prev.length - 1];
+        if (lastMsg && lastMsg.role === "assistant") {
+          return [
+            ...prev.slice(0, -1),
+            { ...lastMsg, content: lastMsg.content + "\n\n" + data.content },
+          ];
+        }
+        return [...prev, { role: "assistant", content: data.content }];
+      });
+    };
+
+    const onToolStatus = (
+      _event: any,
+      data: { name: string; status: string },
+    ) => {
+      if (data.status === "start") {
+        setActiveTool({ name: data.name, status: "in_progress" });
+      } else {
+        setActiveTool(null);
+      }
+    };
+
+    ipcRenderer.on("chat-update", onChatUpdate);
+    ipcRenderer.on("tool-status", onToolStatus);
+
+    return () => {
+      ipcRenderer.removeListener("chat-update", onChatUpdate);
+      ipcRenderer.removeListener("tool-status", onToolStatus);
+    };
+  }, []);
 
   useEffect(() => {
     const savedPath = localStorage.getItem("worklooking_data_path");
@@ -38,6 +76,22 @@ export default function App() {
       ipcRenderer.invoke("set-user-data-path", savedPath).then((res: any) => {
         if (res.success) {
           setUserDataPath(savedPath);
+          // Migration check for candidature_config.json
+          const savedConfig = localStorage.getItem(
+            "worklooking_candidature_config",
+          );
+          if (!savedConfig) {
+            ipcRenderer
+              .invoke("read-file", { filePath: "candidature_config.json" })
+              .then((fileRes: any) => {
+                if (fileRes.content) {
+                  localStorage.setItem(
+                    "worklooking_candidature_config",
+                    fileRes.content,
+                  );
+                }
+              });
+          }
         } else {
           ipcRenderer.invoke("get-user-data-path").then(setUserDataPath);
         }
@@ -75,6 +129,8 @@ export default function App() {
 
     try {
       const resumeJson = localStorage.getItem("worklooking_resume") || "";
+      const configJson =
+        localStorage.getItem("worklooking_candidature_config") || "";
       const response = await ipcRenderer.invoke("ai-chat", {
         messages: updatedMessages.map((m) => ({
           role: m.role,
@@ -83,6 +139,7 @@ export default function App() {
         apiKey: apiKey,
         model: selectedModel,
         resumeJson: resumeJson,
+        configJson: configJson,
       });
 
       if (response.error) {
@@ -90,13 +147,41 @@ export default function App() {
       }
 
       if (response.updatedResume) {
-        localStorage.setItem("worklooking_resume", JSON.stringify(response.updatedResume, null, 2));
+        localStorage.setItem(
+          "worklooking_resume",
+          JSON.stringify(response.updatedResume, null, 2),
+        );
       }
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: response.content || "" },
-      ]);
+      if (response.updatedConfig) {
+        localStorage.setItem(
+          "worklooking_candidature_config",
+          JSON.stringify(response.updatedConfig, null, 2),
+        );
+      }
+
+      if (response.content) {
+        setMessages((prev) => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            // Check if this content is already part of the last message to avoid duplicates
+            // (Simple heuristic: if the last message already has content, we append)
+            // But actually, the final response content is usually the "Final Answer"
+            // while streamed chunks were "Context Phrases".
+            return [
+              ...prev.slice(0, -1),
+              {
+                ...lastMsg,
+                content: lastMsg.content + "\n\n" + response.content,
+              },
+            ];
+          }
+          return [
+            ...prev,
+            { role: "assistant", content: response.content || "" },
+          ];
+        });
+      }
     } catch (error: any) {
       setMessages((prev) => [
         ...prev,
@@ -168,6 +253,7 @@ export default function App() {
                 isTyping={isTyping}
                 userDataPath={userDataPath}
                 setMessages={setMessages}
+                activeTool={activeTool}
               />
             }
           />
@@ -185,7 +271,10 @@ export default function App() {
             }
           />
           <Route path="/resume-editor" element={<ResumeEditorPage />} />
-          <Route path="/candidature-editor" element={<CandidatureEditorPage />} />
+          <Route
+            path="/candidature-editor"
+            element={<CandidatureEditorPage />}
+          />
         </Routes>
       </main>
     </div>

@@ -1,8 +1,26 @@
 import path from "path"
-import { readFileSync } from "fs"
-const agentInstruction = readFileSync(path.join(__dirname, "agent.md"))
+import { readFileSync, existsSync } from "fs"
+import { app } from "electron"
 
-export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: string) => `
+const getAgentInstruction = () => {
+  const possiblePaths = [
+    path.join(app.getAppPath(), "electron", "agent", "agent.md"),
+    path.join(app.getAppPath(), "agent", "agent.md"),
+    path.join(__dirname, "agent.md"),
+    path.join(__dirname, "agent", "agent.md"),
+  ];
+
+  for (const p of possiblePaths) {
+    if (existsSync(p)) {
+      return readFileSync(p, "utf-8");
+    }
+  }
+  return "Expert recruitment assistant instructions not found.";
+};
+
+export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: string) => {
+  const agentInstruction = getAgentInstruction();
+  return `
       You are an expert recruitment assistant. 
       Context from agent.md: ${agentInstruction}
       Current config: ${configJson}
@@ -10,6 +28,7 @@ export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: strin
       
       Rules:
       - Be concise and professional.
+      - **CRITICAL**: Whenever you use a tool, you MUST first provide a short, human-friendly sentence in the 'content' field explaining why you are calling this tool (e.g., "Je vais maintenant extraire le texte de votre CV PDF...", "Je crée le dossier de candidature pour cette offre...").
       - Use "save_source_resume" ONLY to update the main source CV data.
       - Use "write_file" for any other files (tailored resumes for specific offers, markdown files, etc.).
       - Use ONLY the provided tools for filesystem actions.
@@ -40,4 +59,5 @@ export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: strin
       6. Use "generate_pdf" if requested.
 
       CRITICAL: You MUST have the job description content (either from direct text or tool result) before calling "render_resume" or "write_file" for a tailored resume. Sequential logic is mandatory when a fetch is required.
-    `
+    `;
+};

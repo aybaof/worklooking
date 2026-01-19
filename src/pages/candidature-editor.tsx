@@ -55,6 +55,21 @@ export default function CandidatureEditorPage() {
     setIsLoading(true);
     setError(null);
     setSaveSuccess(false);
+
+    // 1. Try LocalStorage
+    const savedConfig = localStorage.getItem("worklooking_candidature_config");
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig) as CandidatureConfig;
+        setConfig(parsed);
+        setIsLoading(false);
+        return;
+      } catch (e) {
+        console.error("Failed to parse config from localStorage", e);
+      }
+    }
+
+    // 2. Fallback to Disk (Migration)
     try {
       const response = await ipcRenderer.invoke("read-file", {
         filePath: "candidature_config.json",
@@ -63,13 +78,14 @@ export default function CandidatureEditorPage() {
         try {
           const parsed = JSON.parse(response.content) as CandidatureConfig;
           setConfig(parsed);
+          localStorage.setItem("worklooking_candidature_config", response.content);
         } catch (e) {
           setError("Fichier corrompu ou JSON invalide sur le disque.");
         }
       }
     } catch (err) {
       console.error("Failed to load config:", err);
-      setError("Erreur lors du chargement de la configuration.");
+      // Not necessarily an error if it's the first time
     } finally {
       setIsLoading(false);
     }
@@ -84,17 +100,15 @@ export default function CandidatureEditorPage() {
     setSaveSuccess(false);
     setIsSaving(true);
     try {
-      const res = await ipcRenderer.invoke("write-file", {
-        filePath: "candidature_config.json",
-        content: JSON.stringify(config, null, 2),
-      });
-      if (res.success) {
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
-      }
+      localStorage.setItem(
+        "worklooking_candidature_config",
+        JSON.stringify(config, null, 2),
+      );
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error("Failed to save config:", err);
-      setError("Erreur lors de l'écriture du fichier.");
+      setError("Erreur lors de l'enregistrement en local.");
     } finally {
       setIsSaving(false);
     }

@@ -8,13 +8,13 @@ Les informations personnelles, les entreprises cibles et le suivi des candidatur
 
 ### Protocole d'Initialisation (Si absent)
 
-#### 1. Configuration (`candidature_config.json`)
-Si `candidature_config.json` n'existe pas, l'agent **doit** proposer de le créer en posant les questions suivantes au candidat :
+#### 1. Configuration (Profil et Suivi)
+Si la configuration est absente du prompt système (message "No config found"), l'agent **doit** proposer de la créer en posant les questions suivantes au candidat :
 1. **Identité** : Nom complet, poste recherché, localisation et années d'expérience.
 2. **Compétences** : Liste des technologies clés par catégorie (Frontend, Backend, etc.).
 3. **Objectifs** : Prétentions salariales, type de contrat et politique de télétravail souhaitée.
 
-L'agent doit ensuite générer le fichier JSON initial avec une section `target_companies` et `applications` vide (tableaux vides `[]`).
+L'agent doit ensuite générer l'objet de configuration initial avec une section `target_companies` et `applications` vide (tableaux vides `[]`) et utiliser `save_candidature_config`.
 
 #### 2. CV Source
 Le CV source est stocké dans le navigateur et vous est transmis dans le prompt système. Si le CV source est vide ou absent du prompt, l'agent **doit** aider le candidat à le générer :
@@ -24,9 +24,11 @@ Le CV source est stocké dans le navigateur et vous est transmis dans le prompt 
     c) **Fichier local** : Le candidat donne le chemin d'un fichier texte/markdown contenant son CV.
 - Une fois le contenu validé, l'agent **doit** utiliser l'outil `save_source_resume` pour enregistrer le CV source.
 
-**Note pour l'Agent** : Utilisez le "SOURCE RESUME" fourni dans le prompt comme base de travail. Pour les candidatures, vous enregistrerez des versions adaptées dans des fichiers locaux via `write_file`. Pour mettre à jour le CV de base (source), utilisez uniquement `save_source_resume`.
+**Note pour l'Agent** : Tous les outils `save_...` informent le frontend qui persiste les données dans le `localStorage` du navigateur. Utilisez le "SOURCE RESUME" et la configuration fournis dans le prompt comme base de travail.
 
 ## Instructions pour l'Agent
+
+**Dynamisme et Communication** : L'interface affiche vos pensées en temps réel. Lorsque vous décidez d'utiliser un outil, expliquez TOUJOURS brièvement ce que vous faites dans le champ `content` avant de lancer l'appel (ex: "Je vais lire le fichier...", "Je prépare le PDF...").
 
 ### 1. Dossiers de Candidature
 
@@ -56,7 +58,7 @@ candidatures/
    - **Étape 2** : `write_file` pour sauvegarder le HTML dans `resume.html`.
    - **Étape 3** : `generate_pdf` à partir du HTML pour créer `resume.pdf`.
 6. **Rédiger la lettre de motivation** si nécessaire.
-7. **Mettre à jour `candidature_config.json`** dans la section `applications`.
+7. **Mettre à jour le suivi** via `save_candidature_config` dans la section `applications`.
 
 ### 2. Adaptation du CV (resume.json)
 
@@ -77,7 +79,7 @@ Créer `lettre-motivation.md` (250-350 mots) avec une structure professionnelle 
 
 ### 4. Suivi des Candidatures
 
-Mettre à jour la section `applications` de `candidature_config.json` avec les statuts : `A postuler`, `Postulé`, `En attente`, `Entretien`, `Offre`, `Refus`.
+Mettre à jour la section `applications` de la configuration via `save_candidature_config` avec les statuts : `A postuler`, `Postulé`, `En attente`, `Entretien`, `Offre`, `Refus`.
 
 ### 5. Recherche sur les Entreprises
 
@@ -87,4 +89,7 @@ Avant de postuler, rechercher le secteur, la stack technique, la culture et les 
 
 - **Thème CV** : `modern-sidebar` (Sidebar moderne, labels adaptés).
 - **Format PDF** : A4, Scale 1.0, Marges 0. Géré nativement par l'application.
-- **Stockage** : Tous les fichiers sont gérés via les outils `read_file` et `write_file` qui pointent vers le dossier de données utilisateur.
+- **Stockage** : 
+    - Configuration et CV Source : `localStorage` (via tools `save_...`).
+    - Fichiers de candidatures : Système de fichiers local (via `read_file` / `write_file`).
+- **Dossier de données** : Tous les fichiers sont gérés via les outils qui pointent vers le dossier de données utilisateur défini dans les paramètres.

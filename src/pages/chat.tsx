@@ -11,6 +11,7 @@ import {
   User,
   X,
   FileText,
+  Wrench,
 } from "lucide-react";
 import { useState, Dispatch, RefObject, SetStateAction } from "react";
 import Markdown from "react-markdown";
@@ -27,6 +28,7 @@ interface IChatPage {
   isTyping: boolean;
   userDataPath: string;
   setMessages: Dispatch<SetStateAction<Message[]>>;
+  activeTool: { name: string; status: string } | null;
 }
 
 export default function ChatPage({
@@ -39,6 +41,7 @@ export default function ChatPage({
   isTyping,
   userDataPath,
   setMessages,
+  activeTool,
 }: IChatPage) {
   const [attachment, setAttachment] = useState<string | null>(null);
 
@@ -104,11 +107,17 @@ export default function ChatPage({
           </div>
         ))}
         {isTyping && (
-          <div className="flex justify-start">
+          <div className="flex flex-col gap-2 items-start">
             <div className="flex items-center gap-2 text-muted-foreground text-sm bg-muted/50 px-3 py-2 rounded-lg">
               <Loader2 className="w-4 h-4 animate-spin" />
               L'agent réfléchit...
             </div>
+            {activeTool && (
+              <div className="flex items-center gap-2 text-primary text-xs bg-primary/10 px-3 py-1.5 rounded-full animate-pulse border border-primary/20">
+                <Wrench className="w-3 h-3" />
+                <span>Utilisation de l'outil : <strong>{activeTool.name}</strong>...</span>
+              </div>
+            )}
           </div>
         )}
       </div>

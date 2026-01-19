@@ -7,15 +7,9 @@ import { tools } from "./agent/tools";
 import { GenerateSystemPrompt } from "./agent/prompt";
 
 // Paths configuration
+const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 let USER_DATA_PATH = app.getPath("userData");
-// In development, app.getAppPath() usually points to the directory containing main.js (or the root if run via electron .)
-// Based on the current setup (tsx electron/main.ts), it might be the electron folder.
 const APP_PATH = app.getAppPath();
-// If APP_PATH is the electron folder, PROJECT_ROOT is one level up.
-// We'll check for package.json to be sure.
-const PROJECT_ROOT = fs.existsSync(path.join(APP_PATH, "package.json"))
-  ? APP_PATH
-  : path.join(APP_PATH, "..");
 
 // --- Types ---
 
@@ -35,6 +29,7 @@ interface ChatArgs {
   apiKey: string;
   model: string;
   resumeJson?: string;
+  configJson?: string;
 }
 
 // --- Core Functionality ---
@@ -47,21 +42,25 @@ async function writeFile({ filePath, content }: { filePath: string; content: str
 }
 
 async function renderResume({ resumeJson, themeName }: ResumeArgs) {
-  // Built-in themes are now in electron/themes
-  const themePath = path.join(APP_PATH, "themes", themeName, "index.js");
+  // In development, themes are in electron/themes
+  // In production, they are where we put them in the package.
+  // We'll try a few locations.
+  const possiblePaths = [
+    path.join(APP_PATH, "electron", "themes", themeName, "index.js"), // Dev or if included as electron/themes
+    path.join(APP_PATH, "themes", themeName, "index.js"),            // If copied to root of APP_PATH
+    path.join(__dirname, "themes", themeName, "index.js"),           // Relative to bundled main.js
+  ];
 
-  if (!fs.existsSync(themePath)) {
-    // Fallback to project root themes just in case (optional, but themes are moved to electron/themes)
-    const fallbackPath = path.join(PROJECT_ROOT, "themes", themeName, "index.js");
-    if (!fs.existsSync(fallbackPath)) {
-      throw new Error(`Theme ${themeName} not found at ${themePath}`);
+  let themePath = "";
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      themePath = p;
+      break;
     }
-    // If found in fallback, use it
-    if (require.cache[require.resolve(fallbackPath)]) {
-      delete require.cache[require.resolve(fallbackPath)];
-    }
-    const theme = require(fallbackPath);
-    return theme.render(resumeJson);
+  }
+
+  if (!themePath) {
+    throw new Error(`Theme ${themeName} not found. Searched in: ${possiblePaths.join(", ")}`);
   }
 
   if (require.cache[require.resolve(themePath)]) {
@@ -174,24 +173,20 @@ async function readFile({ filePath }: { filePath: string }) {
   return { content };
 }
 
-ipcMain.handle("ai-chat", async (_event: IpcMainInvokeEvent, { messages, apiKey, model, resumeJson }: ChatArgs) => {
+ipcMain.handle("ai-chat", async (_event: IpcMainInvokeEvent, { messages, apiKey, model, resumeJson, configJson }: ChatArgs) => {
   const client = new OpenAI({
     apiKey: apiKey,
     baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
   });
 
   try {
-
-    const configPath = path.join(USER_DATA_PATH, "candidature_config.json");
-    const configJson = fs.existsSync(configPath)
-      ? fs.readFileSync(configPath, "utf-8")
-      : "No config found. Perform initialization.";
-
+    const configSourceJson = configJson || "No config found. Perform initialization.";
     const resumeSourceJson = resumeJson || "No source resume JSON provided.";
 
-    const systemPrompt = GenerateSystemPrompt(configJson, resumeSourceJson);
+    const systemPrompt = GenerateSystemPrompt(configSourceJson, resumeSourceJson);
 
     let updatedResumeJson: any = null;
+    let updatedConfigJson: any = null;
 
     let currentMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
@@ -211,12 +206,17 @@ ipcMain.handle("ai-chat", async (_event: IpcMainInvokeEvent, { messages, apiKey,
     let assistantMessage = response.choices[0].message;
 
     while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+      if (assistantMessage.content) {
+        _event.sender.send("chat-update", { content: assistantMessage.content });
+      }
       currentMessages.push(assistantMessage);
 
       for (const toolCall of assistantMessage.tool_calls) {
         if (toolCall.type !== "function") continue;
         const name = toolCall.function.name;
         const args = JSON.parse(toolCall.function.arguments);
+
+        _event.sender.send("tool-status", { name, status: "start", args });
 
         let result;
         try {
@@ -233,12 +233,17 @@ ipcMain.handle("ai-chat", async (_event: IpcMainInvokeEvent, { messages, apiKey,
           } else if (name === "save_source_resume") {
             updatedResumeJson = args.resumeJson;
             result = { success: true, message: "Source resume updated in memory. It will be persisted by the frontend." };
+          } else if (name === "save_candidature_config") {
+            updatedConfigJson = args.config;
+            result = { success: true, message: "Configuration updated in memory. It will be persisted by the frontend." };
           } else if (name === "read_pdf") {
             result = await readPdf(args.filePath);
           }
         } catch (e: any) {
           result = { error: e.message };
         }
+
+        _event.sender.send("tool-status", { name, status: "end", result });
 
         currentMessages.push({
           role: "tool",
@@ -261,7 +266,8 @@ ipcMain.handle("ai-chat", async (_event: IpcMainInvokeEvent, { messages, apiKey,
 
     return {
       content: assistantMessage.content || "No content returned",
-      updatedResume: updatedResumeJson
+      updatedResume: updatedResumeJson,
+      updatedConfig: updatedConfigJson
     };
   } catch (error: any) {
     return { error: error.message };
@@ -278,10 +284,20 @@ function createWindow() {
     },
   });
 
-  if (process.env.NODE_ENV === "development") {
+  if (isDev) {
     win.loadURL("http://localhost:5173");
   } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"));
+    // In production, __dirname is dist-electron
+    // index.html is in dist/index.html (sibling of dist-electron)
+    const indexPath = path.join(__dirname, "..", "dist", "index.html");
+    if (fs.existsSync(indexPath)) {
+      win.loadFile(indexPath);
+    } else {
+      // Fallback or debug
+      console.error("Index file not found at:", indexPath);
+      // Try relative to app path
+      win.loadFile(path.join(APP_PATH, "dist", "index.html"));
+    }
   }
 }
 

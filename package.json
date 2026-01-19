@@ -1,26 +1,32 @@
 {
   "name": "worklooking",
   "version": "1.0.0",
-  "main": "electron/main.ts",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run vite\" \"wait-on http://localhost:5173 && nodemon\"",
     "vite": "vite",
-    "build": "vite build && electron-builder",
+    "build:main": "vite build --config vite.main.config.ts",
+    "build:renderer": "vite build",
+    "build": "npm run build:renderer && npm run build:main && electron-builder",
     "preview": "vite preview"
   },
   "build": {
     "appId": "com.worklooking.agent",
-    "productName": "WorkLooking Agent",
+    "productName": "WorkLookingAgent",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
-      "electron/**/*",
+      "dist-electron/**/*",
+      "electron/agent/agent.md",
+      "electron/themes/**/*",
       "package.json"
     ],
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "icon": "electron/icon.png",
+      "artifactName": "${productName}.${ext}"
     }
   },
   "dependencies": {
