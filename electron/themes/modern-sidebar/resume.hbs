@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="fr">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>{{#resume.basics}}{{name}}{{/resume.basics}}</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+	<style>
+		{{{css}}}
+	</style>
+</head>
+<body>
+	<div class="resume">
+		<!-- Sidebar -->
+		<aside class="sidebar">
+			{{#resume.basics}}
+				{{#if image}}
+				<div class="photo">
+					<img src="{{image}}" alt="{{name}}" />
+				</div>
+				{{/if}}
+				
+				<div class="sidebar-section">
+					<h3><i class="fas fa-user"></i> Contact</h3>
+					{{#if email}}
+					<div class="contact-item">
+						<i class="fas fa-envelope"></i>
+						<a href="mailto:{{email}}">{{email}}</a>
+					</div>
+					{{/if}}
+					{{#if phone}}
+					<div class="contact-item">
+						<i class="fas fa-phone"></i>
+						<span>{{phone}}</span>
+					</div>
+					{{/if}}
+					{{#location}}
+					{{#if city}}
+					<div class="contact-item">
+						<i class="fas fa-map-marker-alt"></i>
+						<span>{{city}}{{#if region}}, {{region}}{{/if}}</span>
+					</div>
+					{{/if}}
+					{{/location}}
+					{{#each profiles}}
+					<div class="contact-item">
+						<i class="fab fa-{{spaceToDash network}}"></i>
+						<a href="{{url}}">{{username}}</a>
+					</div>
+					{{/each}}
+				</div>
+			{{/resume.basics}}
+
+			{{#if resume.skills.length}}
+			<div class="sidebar-section">
+				<h3><i class="fas fa-cogs"></i> Compétences</h3>
+				{{#each resume.skills}}
+				<div class="skill-group">
+					<h4>{{name}}</h4>
+					<div class="skill-tags">
+						{{#each keywords}}
+						<span class="tag">{{.}}</span>
+						{{/each}}
+					</div>
+				</div>
+				{{/each}}
+			</div>
+			{{/if}}
+
+			{{#if resume.languages.length}}
+			<div class="sidebar-section">
+				<h3><i class="fas fa-globe"></i> Langues</h3>
+				{{#each resume.languages}}
+				<div class="language-item">
+					<span class="language-name">{{language}}</span>
+					<span class="language-level">{{fluency}}</span>
+				</div>
+				{{/each}}
+			</div>
+			{{/if}}
+
+			{{#if resume.interests.length}}
+			<div class="sidebar-section">
+				<h3><i class="fas fa-heart"></i> Intérêts</h3>
+				<div class="interests">
+					{{#each resume.interests}}
+					<span class="interest-tag">{{name}}</span>
+					{{/each}}
+				</div>
+			</div>
+			{{/if}}
+		</aside>
+
+		<!-- Main Content -->
+		<main class="main-content">
+			{{#resume.basics}}
+			<header class="header">
+				<h1>{{name}}</h1>
+				<h2>{{label}}</h2>
+			</header>
+
+			{{#if summary}}
+			<section class="section">
+				<h3><i class="fas fa-user-circle"></i> Profil</h3>
+				<p class="summary">{{summary}}</p>
+			</section>
+			{{/if}}
+			{{/resume.basics}}
+
+			{{#if resume.work.length}}
+			<section class="section">
+				<h3><i class="fas fa-briefcase"></i> Expérience</h3>
+				{{#each resume.work}}
+				<div class="entry">
+					<div class="entry-header">
+						<div class="entry-title">
+							<h4>{{position}}</h4>
+							<span class="company">{{name}}{{#if location}} · {{location}}{{/if}}</span>
+						</div>
+						<div class="entry-date">
+							{{MY startDate}} - {{#if endDate}}{{MY endDate}}{{else}}Présent{{/if}}
+						</div>
+					</div>
+					{{#if highlights.length}}
+					<ul class="highlights">
+						{{#each highlights}}
+						<li>{{.}}</li>
+						{{/each}}
+					</ul>
+					{{/if}}
+				</div>
+				{{/each}}
+			</section>
+			{{/if}}
+
+			{{#if resume.education.length}}
+			<section class="section">
+				<h3><i class="fas fa-graduation-cap"></i> Formation</h3>
+				{{#each resume.education}}
+				<div class="entry">
+					<div class="entry-header">
+						<div class="entry-title">
+							<h4>{{studyType}} {{#if area}}- {{area}}{{/if}}</h4>
+							<span class="company">{{institution}}</span>
+						</div>
+						<div class="entry-date">
+							{{Y startDate}} - {{#if endDate}}{{Y endDate}}{{else}}Présent{{/if}}
+						</div>
+					</div>
+				</div>
+				{{/each}}
+			</section>
+			{{/if}}
+		</main>
+	</div>
+</body>
+</html>

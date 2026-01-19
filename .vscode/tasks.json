@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "start-vite",
+      "type": "npm",
+      "script": "vite",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "typescript",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*VITE.*ready.*",
+          "endsPattern": ".*Local:.*http://localhost:.*"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "jsonresume-theme-spartan-fr",
+  "version": "1.0.0",
+  "description": "Thème français basé sur spartan pour JSON Resume",
+  "author": "Aymeric Barakat",
+  "license": "MIT",
+  "dependencies": {
+    "handlebars": ">=4.5.3",
+    "moment": ">=2.24.0"
+  }
+}

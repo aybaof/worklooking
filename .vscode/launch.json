@@ -1,0 +1,62 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Main",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+      "windows": {
+        "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd"
+      },
+      "args": [
+        "--inspect=5858",
+        "--remote-debugging-port=9222",
+        "-r",
+        "tsx",
+        "electron/main.ts"
+      ],
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "preLaunchTask": "start-vite",
+      "sourceMaps": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Attach Main",
+      "type": "node",
+      "request": "attach",
+      "port": 5858,
+      "cwd": "${workspaceFolder}",
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Attach Renderer",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/src",
+      "timeout": 30000,
+      "urlFilter": "http://localhost:5173/*",
+      "sourceMapPathOverrides": {
+        "webpack:///./src/*": "${webRoot}/*",
+        "vite/resources/*": "${workspaceFolder}/node_modules/vite/dist/client/*"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Launch All (Vite + Electron)",
+      "configurations": ["Launch Main", "Attach Renderer"],
+      "stopAll": true
+    },
+    {
+      "name": "Attach All (Manual Start)",
+      "configurations": ["Attach Main", "Attach Renderer"],
+      "stopAll": true
+    }
+  ]
+}
