@@ -7,6 +7,7 @@ import { tools } from "./agent/tools";
 import { GenerateSystemPrompt } from "./agent/prompt";
 import { renderTheme } from "./themes/shared/render"
 
+if (require('electron-squirrel-startup')) app.quit();
 
 // Paths configuration
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
