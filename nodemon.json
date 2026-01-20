@@ -1,8 +1,8 @@
 {
-  "watch": ["electron"],
-  "ext": "ts,js,json",
-  "exec": "cross-env NODE_ENV=development npx electron --inspect=5858 --remote-debugging-port=9222 -r tsx electron/main.ts",
+  "watch": ["dist-electron/main.js"],
+  "ext": "js",
+  "exec": "cross-env NODE_ENV=development npx electron --inspect=5858 --remote-debugging-port=9222 dist-electron/main.js",
   "legacyWatch": true,
   "restartable": "rs",
-  "ignore": ["node_modules", "dist", "dist-electron"]
+  "ignore": ["node_modules", "dist", "electron", "src"]
 }

@@ -65,12 +65,8 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
             type: "object",
             description: "Le contenu du CV au format JSON Resume.",
           },
-          themeName: {
-            type: "string",
-            description: "Le nom du thème (ex: modern-sidebar).",
-          },
         },
-        required: ["resumeJson", "themeName"],
+        required: ["resumeJson"],
       },
     },
   },

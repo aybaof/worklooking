@@ -5,6 +5,8 @@ import OpenAI from "openai";
 import { PDFParse } from "pdf-parse";
 import { tools } from "./agent/tools";
 import { GenerateSystemPrompt } from "./agent/prompt";
+import { renderTheme } from "./themes/shared/render"
+
 
 // Paths configuration
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
@@ -41,33 +43,14 @@ async function writeFile({ filePath, content }: { filePath: string; content: str
   return { success: true, path: fullPath };
 }
 
-async function renderResume({ resumeJson, themeName }: ResumeArgs) {
-  // In development, themes are in electron/themes
-  // In production, they are where we put them in the package.
-  // We'll try a few locations.
-  const possiblePaths = [
-    path.join(APP_PATH, "electron", "themes", themeName, "index.js"), // Dev or if included as electron/themes
-    path.join(APP_PATH, "themes", themeName, "index.js"),            // If copied to root of APP_PATH
-    path.join(__dirname, "themes", themeName, "index.js"),           // Relative to bundled main.js
-  ];
-
-  let themePath = "";
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      themePath = p;
-      break;
-    }
+async function renderResume({ resumeJson }: ResumeArgs) {
+  try {
+    const targetTheme = "modern-sidebar"; // Default to modern-sidebar
+    return renderTheme(targetTheme, resumeJson);
+  } catch (error: any) {
+    console.error(`Failed to render theme:`, error);
+    throw new Error(`Theme rendering failed: ${error.message}`);
   }
-
-  if (!themePath) {
-    throw new Error(`Theme ${themeName} not found. Searched in: ${possiblePaths.join(", ")}`);
-  }
-
-  if (require.cache[require.resolve(themePath)]) {
-    delete require.cache[require.resolve(themePath)];
-  }
-  const theme = require(themePath);
-  return theme.render(resumeJson);
 }
 
 async function fetchUrl(url: string) {

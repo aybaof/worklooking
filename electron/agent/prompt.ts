@@ -1,25 +1,6 @@
-import path from "path"
-import { readFileSync, existsSync } from "fs"
-import { app } from "electron"
-
-const getAgentInstruction = () => {
-  const possiblePaths = [
-    path.join(app.getAppPath(), "electron", "agent", "agent.md"),
-    path.join(app.getAppPath(), "agent", "agent.md"),
-    path.join(__dirname, "agent.md"),
-    path.join(__dirname, "agent", "agent.md"),
-  ];
-
-  for (const p of possiblePaths) {
-    if (existsSync(p)) {
-      return readFileSync(p, "utf-8");
-    }
-  }
-  return "Expert recruitment assistant instructions not found.";
-};
+import agentInstruction from "./agent.md"
 
 export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: string) => {
-  const agentInstruction = getAgentInstruction();
   return `
       You are an expert recruitment assistant. 
       Context from agent.md: ${agentInstruction}
