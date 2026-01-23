@@ -1,6 +1,6 @@
 {
   "name": "worklooking",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run vite\" \"npm run watch:main\" \"wait-on http://localhost:5173 dist-electron/main.js && nodemon\"",
