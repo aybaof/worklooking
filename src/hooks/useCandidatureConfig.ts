@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { CandidatureConfig } from '@/../shared/candidature-types';
-import { Channels } from '@/../shared/ipc';
+import { useDebounce } from '@/lib/useDebounce';
 
 export function useCandidatureConfig() {
   const [config, setConfig] = useState<CandidatureConfig>({
@@ -27,6 +27,10 @@ export function useCandidatureConfig() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const initialLoadDone = useRef(false);
+  const debouncedConfig = useDebounce(config, 1500);
 
   const loadConfig = useCallback(async () => {
     setIsLoading(true);
@@ -39,26 +43,14 @@ export function useCandidatureConfig() {
         const parsed = JSON.parse(savedConfig) as CandidatureConfig;
         setConfig(parsed);
         setIsLoading(false);
+        initialLoadDone.current = true;
         return;
       } catch (e) {
         console.error("Failed to parse config from localStorage", e);
       }
     }
-
-    try {
-      const response = await window.api.invoke(Channels.FILE_READ, {
-        filePath: "candidature_config.json",
-      });
-      if (response.content) {
-        const parsed = JSON.parse(response.content) as CandidatureConfig;
-        setConfig(parsed);
-        localStorage.setItem("worklooking_candidature_config", response.content);
-      }
-    } catch (err) {
-      console.error("Failed to load config:", err);
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
+    initialLoadDone.current = true;
   }, []);
 
   useEffect(() => {
@@ -72,6 +64,7 @@ export function useCandidatureConfig() {
     try {
       localStorage.setItem("worklooking_candidature_config", JSON.stringify(config, null, 2));
       setSaveSuccess(true);
+      setIsDirty(false);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error("Failed to save config:", err);
@@ -81,7 +74,15 @@ export function useCandidatureConfig() {
     }
   }, [config]);
 
+  // Auto-save effect
+  useEffect(() => {
+    if (initialLoadDone.current && isDirty) {
+      saveConfig();
+    }
+  }, [debouncedConfig, saveConfig, isDirty]);
+
   const updateCandidate = useCallback((field: string, value: string | string[] | undefined) => {
+    setIsDirty(true);
     setConfig((prev) => ({
       ...prev,
       candidate: { ...prev.candidate, [field]: value },
@@ -89,6 +90,7 @@ export function useCandidatureConfig() {
   }, []);
 
   const updateCandidateSkill = useCallback((index: number, field: string, value: string | string[] | undefined) => {
+    setIsDirty(true);
     setConfig((prev) => ({
       ...prev,
       candidate: {
@@ -101,6 +103,7 @@ export function useCandidatureConfig() {
   }, []);
 
   const addCandidateSkill = useCallback(() => {
+    setIsDirty(true);
     setConfig((prev) => ({
       ...prev,
       candidate: {
@@ -111,6 +114,7 @@ export function useCandidatureConfig() {
   }, []);
 
   const removeCandidateSkill = useCallback((index: number) => {
+    setIsDirty(true);
     setConfig((prev) => ({
       ...prev,
       candidate: {
@@ -121,6 +125,7 @@ export function useCandidatureConfig() {
   }, []);
 
   const updateGoals = useCallback((field: string, value: string | string[] | undefined) => {
+    setIsDirty(true);
     setConfig((prev) => ({
       ...prev,
       goals: { ...prev.goals, [field]: value },
@@ -128,6 +133,7 @@ export function useCandidatureConfig() {
   }, []);
 
   const addItem = useCallback((section: "target_companies" | "applications", defaultValue: unknown) => {
+    setIsDirty(true);
     setConfig((prev) => ({
       ...prev,
       [section]: [...prev[section], defaultValue as any],
@@ -135,6 +141,7 @@ export function useCandidatureConfig() {
   }, []);
 
   const removeItem = useCallback((section: "target_companies" | "applications", index: number) => {
+    setIsDirty(true);
     setConfig((prev) => ({
       ...prev,
       [section]: prev[section].filter((_, i) => i !== index),
@@ -142,6 +149,7 @@ export function useCandidatureConfig() {
   }, []);
 
   const updateItem = useCallback((section: "target_companies" | "applications", index: number, field: string, value: string | string[] | undefined) => {
+    setIsDirty(true);
     setConfig((prev) => ({
       ...prev,
       [section]: (prev[section] as any[]).map((item, i) =>
@@ -157,6 +165,7 @@ export function useCandidatureConfig() {
     isSaving,
     saveSuccess,
     error,
+    isDirty,
     loadConfig,
     saveConfig,
     updateCandidate,

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { NavButton } from "@/components/resume-editor/shared";
 import { BasicsSection } from "@/components/resume-editor/BasicsSection";
@@ -33,6 +34,7 @@ import { LanguagesSection } from "@/components/resume-editor/LanguagesSection";
 import { InterestsSection } from "@/components/resume-editor/InterestsSection";
 import { ReferencesSection } from "@/components/resume-editor/ReferencesSection";
 import { useResume } from "@/hooks/useResume";
+import { SaveStatus } from "@/components/ui/SaveStatus";
 
 type SectionType =
   | "basics"
@@ -47,6 +49,12 @@ type SectionType =
   | "interests"
   | "references";
 
+const sectionVariants = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -10 },
+};
+
 export default function ResumeEditorPage() {
   const {
     resume,
@@ -54,6 +62,7 @@ export default function ResumeEditorPage() {
     isSaving,
     saveSuccess,
     error,
+    isDirty,
     loadResume,
     saveResume,
     updateBasics,
@@ -68,7 +77,7 @@ export default function ResumeEditorPage() {
   const [activeSection, setActiveSection] = useState<SectionType>("basics");
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-background">
       <div className="flex items-center justify-between px-6 py-4 border-b bg-card">
         <div className="flex items-center gap-2">
           <FileJson className="w-5 h-5 text-primary" />
@@ -79,35 +88,43 @@ export default function ResumeEditorPage() {
             </span>
           )}
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadResume}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")}
-            />
-            Actualiser
-          </Button>
-          <Button
-            size="sm"
-            onClick={saveResume}
-            disabled={isSaving || isLoading}
-            className={cn(saveSuccess && "bg-green-600 hover:bg-green-700")}
-          >
-            {saveSuccess ? (
-              <CheckCircle2 className="w-4 h-4 mr-2" />
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
-            )}
-            {saveSuccess ? "Enregistré" : "Enregistrer"}
-          </Button>
+        <div className="flex items-center gap-4">
+          <SaveStatus
+            isSaving={isSaving}
+            isDirty={isDirty}
+            saveSuccess={saveSuccess}
+            error={error}
+          />
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadResume}
+              disabled={isLoading}
+            >
+              <RefreshCw
+                className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")}
+              />
+              Actualiser
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => saveResume()}
+              disabled={isSaving || isLoading || !isDirty}
+              className={cn(saveSuccess && "bg-green-600 hover:bg-green-700")}
+            >
+              {saveSuccess ? (
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+              ) : (
+                <Save className="w-4 h-4 mr-2" />
+              )}
+              {saveSuccess ? "Enregistré" : "Enregistrer"}
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Navigation */}
         <div className="w-64 border-r bg-muted/30 p-4 space-y-1 overflow-y-auto">
           <NavButton
@@ -178,8 +195,8 @@ export default function ResumeEditorPage() {
           />
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-8">
+         {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
           <div className="max-w-3xl mx-auto space-y-6">
             {error && (
               <div className="flex items-center gap-2 p-4 text-sm font-medium text-destructive bg-destructive/10 rounded-lg border border-destructive/20">
@@ -188,150 +205,165 @@ export default function ResumeEditorPage() {
               </div>
             )}
 
-            {activeSection === "basics" && (
-              <BasicsSection
-                basics={resume.basics}
-                onUpdate={updateBasics}
-                onUpdateLocation={updateLocation}
-                onUpdateProfile={updateProfile}
-                onAddProfile={() =>
-                  addItem("basics_profiles", {
-                    network: "",
-                    username: "",
-                    url: "",
-                  })
-                }
-                onRemoveProfile={removeProfile}
-              />
-            )}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeSection}
+                variants={sectionVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={{ duration: 0.3 }}
+              >
+                {activeSection === "basics" && (
+                  <BasicsSection
+                    basics={resume.basics}
+                    onUpdate={updateBasics}
+                    onUpdateLocation={updateLocation}
+                    onUpdateProfile={updateProfile}
+                    onAddProfile={() =>
+                      addItem("basics_profiles", {
+                        network: "",
+                        username: "",
+                        url: "",
+                      })
+                    }
+                    onRemoveProfile={removeProfile}
+                  />
+                )}
 
-            {activeSection === "work" && (
-              <WorkSection
-                items={resume.work}
-                onAdd={() =>
-                  addItem("work", {
-                    name: "",
-                    position: "",
-                    startDate: "",
-                    highlights: [],
-                  })
-                }
-                onRemove={(i) => removeItem("work", i)}
-                onUpdate={(i, f, v) => updateItem("work", i, f, v)}
-              />
-            )}
+                {activeSection === "work" && (
+                  <WorkSection
+                    items={resume.work}
+                    onAdd={() =>
+                      addItem("work", {
+                        name: "",
+                        position: "",
+                        startDate: "",
+                        highlights: [],
+                      })
+                    }
+                    onRemove={(i) => removeItem("work", i)}
+                    onUpdate={(i, f, v) => updateItem("work", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "volunteer" && (
-              <VolunteerSection
-                items={resume.volunteer}
-                onAdd={() =>
-                  addItem("volunteer", {
-                    organization: "",
-                    position: "",
-                    startDate: "",
-                  })
-                }
-                onRemove={(i) => removeItem("volunteer", i)}
-                onUpdate={(i, f, v) => updateItem("volunteer", i, f, v)}
-              />
-            )}
+                {activeSection === "volunteer" && (
+                  <VolunteerSection
+                    items={resume.volunteer}
+                    onAdd={() =>
+                      addItem("volunteer", {
+                        organization: "",
+                        position: "",
+                        startDate: "",
+                      })
+                    }
+                    onRemove={(i) => removeItem("volunteer", i)}
+                    onUpdate={(i, f, v) => updateItem("volunteer", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "education" && (
-              <EducationSection
-                items={resume.education}
-                onAdd={() =>
-                  addItem("education", {
-                    institution: "",
-                    area: "",
-                    studyType: "",
-                    startDate: "",
-                  })
-                }
-                onRemove={(i) => removeItem("education", i)}
-                onUpdate={(i, f, v) => updateItem("education", i, f, v)}
-              />
-            )}
+                {activeSection === "education" && (
+                  <EducationSection
+                    items={resume.education}
+                    onAdd={() =>
+                      addItem("education", {
+                        institution: "",
+                        area: "",
+                        studyType: "",
+                        startDate: "",
+                      })
+                    }
+                    onRemove={(i) => removeItem("education", i)}
+                    onUpdate={(i, f, v) => updateItem("education", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "projects" && (
-              <ProjectsSection
-                items={resume.projects}
-                onAdd={() =>
-                  addItem("projects", {
-                    name: "",
-                    description: "",
-                    keywords: [],
-                  })
-                }
-                onRemove={(i) => removeItem("projects", i)}
-                onUpdate={(i, f, v) => updateItem("projects", i, f, v)}
-              />
-            )}
+                {activeSection === "projects" && (
+                  <ProjectsSection
+                    items={resume.projects}
+                    onAdd={() =>
+                      addItem("projects", {
+                        name: "",
+                        description: "",
+                        keywords: [],
+                      })
+                    }
+                    onRemove={(i) => removeItem("projects", i)}
+                    onUpdate={(i, f, v) => updateItem("projects", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "skills" && (
-              <SkillsSection
-                items={resume.skills}
-                onAdd={() =>
-                  addItem("skills", { name: "", level: "", keywords: [] })
-                }
-                onRemove={(i) => removeItem("skills", i)}
-                onUpdate={(i, f, v) => updateItem("skills", i, f, v)}
-              />
-            )}
+                {activeSection === "skills" && (
+                  <SkillsSection
+                    items={resume.skills}
+                    onAdd={() =>
+                      addItem("skills", { name: "", level: "", keywords: [] })
+                    }
+                    onRemove={(i) => removeItem("skills", i)}
+                    onUpdate={(i, f, v) => updateItem("skills", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "awards" && (
-              <AwardsSection
-                items={resume.awards}
-                onAdd={() =>
-                  addItem("awards", { title: "", date: "", awarder: "" })
-                }
-                onRemove={(i) => removeItem("awards", i)}
-                onUpdate={(i, f, v) => updateItem("awards", i, f, v)}
-              />
-            )}
+                {activeSection === "awards" && (
+                  <AwardsSection
+                    items={resume.awards}
+                    onAdd={() =>
+                      addItem("awards", { title: "", date: "", awarder: "" })
+                    }
+                    onRemove={(i) => removeItem("awards", i)}
+                    onUpdate={(i, f, v) => updateItem("awards", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "publications" && (
-              <PublicationsSection
-                items={resume.publications}
-                onAdd={() =>
-                  addItem("publications", {
-                    name: "",
-                    publisher: "",
-                    releaseDate: "",
-                  })
-                }
-                onRemove={(i) => removeItem("publications", i)}
-                onUpdate={(i, f, v) => updateItem("publications", i, f, v)}
-              />
-            )}
+                {activeSection === "publications" && (
+                  <PublicationsSection
+                    items={resume.publications}
+                    onAdd={() =>
+                      addItem("publications", {
+                        name: "",
+                        publisher: "",
+                        releaseDate: "",
+                      })
+                    }
+                    onRemove={(i) => removeItem("publications", i)}
+                    onUpdate={(i, f, v) => updateItem("publications", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "languages" && (
-              <LanguagesSection
-                items={resume.languages}
-                onAdd={() =>
-                  addItem("languages", { language: "", fluency: "" })
-                }
-                onRemove={(i) => removeItem("languages", i)}
-                onUpdate={(i, f, v) => updateItem("languages", i, f, v)}
-              />
-            )}
+                {activeSection === "languages" && (
+                  <LanguagesSection
+                    items={resume.languages}
+                    onAdd={() =>
+                      addItem("languages", { language: "", fluency: "" })
+                    }
+                    onRemove={(i) => removeItem("languages", i)}
+                    onUpdate={(i, f, v) => updateItem("languages", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "interests" && (
-              <InterestsSection
-                items={resume.interests}
-                onAdd={() => addItem("interests", { name: "", keywords: [] })}
-                onRemove={(i) => removeItem("interests", i)}
-                onUpdate={(i, f, v) => updateItem("interests", i, f, v)}
-              />
-            )}
+                {activeSection === "interests" && (
+                  <InterestsSection
+                    items={resume.interests}
+                    onAdd={() =>
+                      addItem("interests", { name: "", keywords: [] })
+                    }
+                    onRemove={(i) => removeItem("interests", i)}
+                    onUpdate={(i, f, v) => updateItem("interests", i, f, v)}
+                  />
+                )}
 
-            {activeSection === "references" && (
-              <ReferencesSection
-                items={resume.references}
-                onAdd={() => addItem("references", { name: "", reference: "" })}
-                onRemove={(i) => removeItem("references", i)}
-                onUpdate={(i, f, v) => updateItem("references", i, f, v)}
-              />
-            )}
+                {activeSection === "references" && (
+                  <ReferencesSection
+                    items={resume.references}
+                    onAdd={() =>
+                      addItem("references", { name: "", reference: "" })
+                    }
+                    onRemove={(i) => removeItem("references", i)}
+                    onUpdate={(i, f, v) => updateItem("references", i, f, v)}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </div>

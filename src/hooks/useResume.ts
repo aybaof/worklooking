@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Resume } from '@/../shared/resume-types';
+import { useDebounce } from '@/lib/useDebounce';
 
 export function useResume() {
   const [resume, setResume] = useState<Resume>({
@@ -24,6 +25,10 @@ export function useResume() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const initialLoadDone = useRef(false);
+  const debouncedResume = useDebounce(resume, 1500);
 
   const loadResume = useCallback(async () => {
     setIsLoading(true);
@@ -40,6 +45,7 @@ export function useResume() {
       setError("Erreur lors du chargement du CV.");
     } finally {
       setIsLoading(false);
+      initialLoadDone.current = true;
     }
   }, []);
 
@@ -54,6 +60,7 @@ export function useResume() {
     try {
       localStorage.setItem("worklooking_resume", JSON.stringify(resume, null, 2));
       setSaveSuccess(true);
+      setIsDirty(false);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error("Failed to save resume:", err);
@@ -63,7 +70,15 @@ export function useResume() {
     }
   }, [resume]);
 
+  // Auto-save effect
+  useEffect(() => {
+    if (initialLoadDone.current && isDirty) {
+      saveResume();
+    }
+  }, [debouncedResume, saveResume, isDirty]);
+
   const updateBasics = useCallback((field: string, value: string | string[] | undefined) => {
+    setIsDirty(true);
     setResume((prev) => ({
       ...prev,
       basics: { ...prev.basics, [field]: value },
@@ -71,6 +86,7 @@ export function useResume() {
   }, []);
 
   const updateLocation = useCallback((field: string, value: string | string[] | undefined) => {
+    setIsDirty(true);
     setResume((prev) => ({
       ...prev,
       basics: {
@@ -81,6 +97,7 @@ export function useResume() {
   }, []);
 
   const updateProfile = useCallback((index: number, field: string, value: string | string[] | undefined) => {
+    setIsDirty(true);
     setResume((prev) => ({
       ...prev,
       basics: {
@@ -93,6 +110,7 @@ export function useResume() {
   }, []);
 
   const removeProfile = useCallback((index: number) => {
+    setIsDirty(true);
     setResume((prev) => ({
       ...prev,
       basics: {
@@ -103,6 +121,7 @@ export function useResume() {
   }, []);
 
   const addItem = useCallback((section: keyof Resume | "basics_profiles", defaultValue: unknown) => {
+    setIsDirty(true);
     if (section === "basics_profiles") {
       setResume((prev) => ({
         ...prev,
@@ -120,6 +139,7 @@ export function useResume() {
   }, []);
 
   const removeItem = useCallback((section: keyof Resume, index: number) => {
+    setIsDirty(true);
     setResume((prev) => ({
       ...prev,
       [section]: (prev[section] as any[]).filter((_, i) => i !== index),
@@ -127,6 +147,7 @@ export function useResume() {
   }, []);
 
   const updateItem = useCallback((section: keyof Resume, index: number, field: string, value: string | string[] | undefined) => {
+    setIsDirty(true);
     setResume((prev) => ({
       ...prev,
       [section]: (prev[section] as any[]).map((item, i) =>
@@ -141,6 +162,7 @@ export function useResume() {
     isSaving,
     saveSuccess,
     error,
+    isDirty,
     loadResume,
     saveResume,
     updateBasics,

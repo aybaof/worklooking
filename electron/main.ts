@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog, session } from "electron";
 import path from "path";
 import fs from "fs";
 import OpenAI from "openai";
@@ -9,6 +9,7 @@ import { renderTheme } from "./themes/shared/render"
 import { Channels, ErrorCodes } from "../shared/ipc";
 import { Resume } from "../shared/resume-types";
 import { CandidatureConfig } from "../shared/candidature-types";
+
 
 if (require('electron-squirrel-startup')) app.quit();
 
@@ -23,18 +24,18 @@ function validateAndSanitizePath(filePath: string, basePath: string): string {
   if (!filePath) {
     throw new IPCError(ErrorCodes.INVALID_PATH, 'Path is required');
   }
-  
-  const resolvedPath = path.isAbsolute(filePath) 
-    ? filePath 
+
+  const resolvedPath = path.isAbsolute(filePath)
+    ? filePath
     : path.join(basePath, filePath);
-  
+
   const normalizedPath = path.normalize(resolvedPath);
-  
+
   // Prevent directory traversal
   if (!normalizedPath.startsWith(basePath) && !path.isAbsolute(filePath)) {
     throw new IPCError(ErrorCodes.INVALID_PATH, 'Path traversal not allowed');
   }
-  
+
   return normalizedPath;
 }
 
@@ -157,10 +158,10 @@ ipcMain.handle(Channels.APP_SET_USER_DATA_PATH, (_event, newPath: string) => {
     return { success: true };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    return { 
-      success: false, 
-      error: message, 
-      code: e instanceof IPCError ? e.code : 'UNKNOWN_ERROR' 
+    return {
+      success: false,
+      error: message,
+      code: e instanceof IPCError ? e.code : 'UNKNOWN_ERROR'
     };
   }
 });
@@ -192,9 +193,9 @@ ipcMain.handle(Channels.FILE_READ, async (_event, { filePath }: { filePath: stri
     return { content };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    return { 
-      error: message, 
-      code: e instanceof IPCError ? e.code : 'UNKNOWN_ERROR' 
+    return {
+      error: message,
+      code: e instanceof IPCError ? e.code : 'UNKNOWN_ERROR'
     };
   }
 });
@@ -207,10 +208,10 @@ ipcMain.handle(Channels.FILE_WRITE, async (_event, { filePath, content }: { file
     return { success: true, path: safePath };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
-    return { 
-      success: false, 
-      error: message, 
-      code: e instanceof IPCError ? e.code : ErrorCodes.WRITE_FAILED 
+    return {
+      success: false,
+      error: message,
+      code: e instanceof IPCError ? e.code : ErrorCodes.WRITE_FAILED
     };
   }
 });
@@ -229,8 +230,8 @@ async function readFile({ filePath }: { filePath: string }) {
 }
 
 async function executeTool(
-  name: string, 
-  args: any, 
+  name: string,
+  args: any,
   event: IpcMainInvokeEvent
 ): Promise<{ result: unknown; updatedResume?: Resume; updatedConfig?: CandidatureConfig }> {
   let result: unknown;
@@ -317,7 +318,7 @@ ipcMain.handle(Channels.AI_CHAT, async (_event: IpcMainInvokeEvent, { messages, 
         _event.sender.send(Channels.TOOL_STATUS, { name, status: "start", args });
 
         const { result, updatedResume, updatedConfig } = await executeTool(name, args, _event);
-        
+
         if (updatedResume) finalResume = updatedResume;
         if (updatedConfig) finalConfig = updatedConfig;
 

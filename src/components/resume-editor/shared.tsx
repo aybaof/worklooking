@@ -4,18 +4,28 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function NavButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-        active ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"
+        "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative",
+        active ? "text-primary-foreground" : "hover:bg-muted text-muted-foreground"
       )}
     >
-      {icon}
-      {label}
+      {active && (
+        <motion.div
+          layoutId="active-nav-bg"
+          className="absolute inset-0 bg-primary rounded-lg -z-10"
+          transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+        />
+      )}
+      <span className="relative z-10 flex items-center gap-3">
+        {icon}
+        {label}
+      </span>
     </button>
   );
 }
@@ -56,26 +66,43 @@ export function ArraySection<T>({ title, description, items, onAdd, onRemove, re
 
       <div className="space-y-4">
         {items.length === 0 && (
-          <div className="text-center p-8 border-2 border-dashed rounded-lg text-muted-foreground">
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center p-8 border-2 border-dashed rounded-lg text-muted-foreground"
+          >
             Aucun élément pour le moment.
-          </div>
+          </motion.div>
         )}
-        {items.map((item, i) => (
-          <Card key={i} className="relative group">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-2 right-2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={() => onRemove(i)}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-            <CardContent className="pt-6">
-              {renderItem(item, i)}
-            </CardContent>
-          </Card>
-        ))}
+        <div className="space-y-4">
+          <AnimatePresence initial={false}>
+            {items.map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: "auto", marginBottom: 16 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Card className="relative group">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-2 right-2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => onRemove(i)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                  <CardContent className="pt-6">
+                    {renderItem(item, i)}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
 }
+

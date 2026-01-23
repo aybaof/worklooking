@@ -36,11 +36,6 @@ export default function ConfigurationPage({
   userDataPath,
   onSelectFolder,
 }: IConfigurationPage) {
-  const saveSettings = () => {
-    localStorage.setItem("opencode_api_key", apiKey);
-    localStorage.setItem("opencode_model", selectedModel);
-  };
-
   return (
     <div className="max-w-2xl mx-auto mt-10 p-6 space-y-6">
       <Card>
@@ -52,7 +47,7 @@ export default function ConfigurationPage({
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Clé API OpenCode</label>
+            <label className="text-sm font-medium">Clé API</label>
             <Input
               type="password"
               placeholder="Entrez votre clé API"
@@ -75,10 +70,6 @@ export default function ConfigurationPage({
               ))}
             </select>
           </div>
-
-          <Button className="w-full" onClick={saveSettings}>
-            Sauvegarder les modifications
-          </Button>
         </CardContent>
       </Card>
 
