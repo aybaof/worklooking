@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog, session } from "electron";
+import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog } from "electron";
 import path from "path";
 import fs from "fs";
 import OpenAI from "openai";
@@ -9,7 +9,10 @@ import { renderTheme } from "./themes/shared/render"
 import { Channels, ErrorCodes } from "../shared/ipc";
 import { Resume } from "../shared/resume-types";
 import { CandidatureConfig } from "../shared/candidature-types";
+import { updateElectronApp } from "update-electron-app";
 
+
+updateElectronApp();
 
 if (require('electron-squirrel-startup')) app.quit();
 
