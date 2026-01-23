@@ -1,11 +1,11 @@
 import { ArraySection, Field } from "../resume-editor/shared";
-import { CandidatureConfig } from "@/lib/candidature-types";
+import { CandidatureConfig } from "@/../shared/candidature-types";
 
 interface ApplicationsSectionProps {
   items: CandidatureConfig["applications"];
   onAdd: () => void;
   onRemove: (index: number) => void;
-  onUpdate: (index: number, field: string, value: any) => void;
+  onUpdate: (index: number, field: string, value: string | string[] | undefined) => void;
 }
 
 export function ApplicationsSection({ items, onAdd, onRemove, onUpdate }: ApplicationsSectionProps) {

@@ -1,11 +1,11 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Field } from "../resume-editor/shared";
-import { CandidatureConfig } from "@/lib/candidature-types";
+import { CandidatureConfig } from "@/../shared/candidature-types";
 import { Textarea } from "@/components/ui/textarea";
 
 interface GoalsSectionProps {
   goals: CandidatureConfig["goals"];
-  onUpdate: (field: string, value: any) => void;
+  onUpdate: (field: string, value: string | string[] | undefined) => void;
   onUpdateCriteria: (value: string[]) => void;
 }
 

@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-const { ipcRenderer } = window.require("electron");
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Settings, Bot, FileText, Target } from "lucide-react";
 import { Routes, Route, NavLink } from "react-router-dom";
@@ -7,190 +6,17 @@ import ChatPage from "./pages/chat";
 import ConfigurationPage from "./pages/configuration";
 import ResumeEditorPage from "./pages/resume-editor";
 import CandidatureEditorPage from "./pages/candidature-editor";
-
-export interface Message {
-  role: "user" | "assistant" | "system" | "tool";
-  content: string | null;
-}
+import { useSettings } from "@/hooks/useSettings";
+import { useChat } from "@/hooks/useChat";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function App() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "Bonjour ! Je suis votre agent de recherche d'emploi. Comment puis-je vous aider aujourd'hui ?",
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [apiKey, setApiKey] = useState(
-    localStorage.getItem("opencode_api_key") || "",
-  );
-  const [selectedModel, setSelectedModel] = useState(
-    localStorage.getItem("opencode_model") || "gemini-3-flash-preview",
-  );
-  const [userDataPath, setUserDataPath] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [activeTool, setActiveTool] = useState<{
-    name: string;
-    status: string;
-  } | null>(null);
+  const settings = useSettings();
+  const chat = useChat({ 
+    apiKey: settings.apiKey, 
+    selectedModel: settings.selectedModel 
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onChatUpdate = (_event: any, data: { content: string }) => {
-      setMessages((prev) => {
-        const lastMsg = prev[prev.length - 1];
-        if (lastMsg && lastMsg.role === "assistant") {
-          return [
-            ...prev.slice(0, -1),
-            { ...lastMsg, content: lastMsg.content + "\n\n" + data.content },
-          ];
-        }
-        return [...prev, { role: "assistant", content: data.content }];
-      });
-    };
-
-    const onToolStatus = (
-      _event: any,
-      data: { name: string; status: string },
-    ) => {
-      if (data.status === "start") {
-        setActiveTool({ name: data.name, status: "in_progress" });
-      } else {
-        setActiveTool(null);
-      }
-    };
-
-    ipcRenderer.on("chat-update", onChatUpdate);
-    ipcRenderer.on("tool-status", onToolStatus);
-
-    return () => {
-      ipcRenderer.removeListener("chat-update", onChatUpdate);
-      ipcRenderer.removeListener("tool-status", onToolStatus);
-    };
-  }, []);
-
-  useEffect(() => {
-    const savedPath = localStorage.getItem("worklooking_data_path");
-    if (savedPath) {
-      ipcRenderer.invoke("set-user-data-path", savedPath).then((res: any) => {
-        if (res.success) {
-          setUserDataPath(savedPath);
-          // Migration check for candidature_config.json
-          const savedConfig = localStorage.getItem(
-            "worklooking_candidature_config",
-          );
-          if (!savedConfig) {
-            ipcRenderer
-              .invoke("read-file", { filePath: "candidature_config.json" })
-              .then((fileRes: any) => {
-                if (fileRes.content) {
-                  localStorage.setItem(
-                    "worklooking_candidature_config",
-                    fileRes.content,
-                  );
-                }
-              });
-          }
-        } else {
-          ipcRenderer.invoke("get-user-data-path").then(setUserDataPath);
-        }
-      });
-    } else {
-      ipcRenderer.invoke("get-user-data-path").then(setUserDataPath);
-    }
-  }, []);
-
-  const handleSelectFolder = async () => {
-    const path = await ipcRenderer.invoke("select-folder");
-    if (path) {
-      const res = await ipcRenderer.invoke("set-user-data-path", path);
-      if (res.success) {
-        setUserDataPath(path);
-        localStorage.setItem("worklooking_data_path", path);
-      }
-    }
-  };
-
-  const handleSend = async (attachmentPath?: string) => {
-    if (!input.trim() || !apiKey) return;
-
-    let messageContent = input;
-    if (attachmentPath) {
-      messageContent += `\n\n[Pièce jointe: ${attachmentPath}]`;
-    }
-
-    const userMessage: Message = { role: "user", content: messageContent };
-    const updatedMessages = [...messages, userMessage];
-
-    setMessages(updatedMessages);
-    setInput("");
-    setIsTyping(true);
-
-    try {
-      const resumeJson = localStorage.getItem("worklooking_resume") || "";
-      const configJson =
-        localStorage.getItem("worklooking_candidature_config") || "";
-      const response = await ipcRenderer.invoke("ai-chat", {
-        messages: updatedMessages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        apiKey: apiKey,
-        model: selectedModel,
-        resumeJson: resumeJson,
-        configJson: configJson,
-      });
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-
-      if (response.updatedResume) {
-        localStorage.setItem(
-          "worklooking_resume",
-          JSON.stringify(response.updatedResume, null, 2),
-        );
-      }
-
-      if (response.updatedConfig) {
-        localStorage.setItem(
-          "worklooking_candidature_config",
-          JSON.stringify(response.updatedConfig, null, 2),
-        );
-      }
-
-      if (response.content) {
-        setMessages((prev) => {
-          const lastMsg = prev[prev.length - 1];
-          if (lastMsg && lastMsg.role === "assistant") {
-            // Check if this content is already part of the last message to avoid duplicates
-            // (Simple heuristic: if the last message already has content, we append)
-            // But actually, the final response content is usually the "Final Answer"
-            // while streamed chunks were "Context Phrases".
-            return [
-              ...prev.slice(0, -1),
-              {
-                ...lastMsg,
-                content: lastMsg.content + "\n\n" + response.content,
-              },
-            ];
-          }
-          return [
-            ...prev,
-            { role: "assistant", content: response.content || "" },
-          ];
-        });
-      }
-    } catch (error: any) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Erreur: ${error.message}.` },
-      ]);
-    } finally {
-      setIsTyping(false);
-    }
-  };
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
@@ -243,37 +69,52 @@ export default function App() {
           <Route
             path="/"
             element={
-              <ChatPage
-                scrollRef={scrollRef}
-                input={input}
-                messages={messages}
-                setInput={setInput}
-                handleSend={handleSend}
-                apiKey={apiKey}
-                isTyping={isTyping}
-                userDataPath={userDataPath}
-                setMessages={setMessages}
-                activeTool={activeTool}
-              />
+              <ErrorBoundary>
+                <ChatPage
+                  scrollRef={scrollRef}
+                  input={chat.input}
+                  messages={chat.messages}
+                  setInput={chat.setInput}
+                  handleSend={chat.handleSend}
+                  apiKey={settings.apiKey}
+                  isTyping={chat.isTyping}
+                  userDataPath={settings.userDataPath}
+                  setMessages={chat.setMessages}
+                  activeTool={chat.activeTool}
+                />
+              </ErrorBoundary>
             }
           />
           <Route
             path="/settings"
             element={
-              <ConfigurationPage
-                apiKey={apiKey}
-                setApiKey={setApiKey}
-                setSelectedModel={setSelectedModel}
-                selectedModel={selectedModel}
-                userDataPath={userDataPath}
-                onSelectFolder={handleSelectFolder}
-              />
+              <ErrorBoundary>
+                <ConfigurationPage
+                  apiKey={settings.apiKey}
+                  setApiKey={settings.setApiKey}
+                  setSelectedModel={settings.setSelectedModel}
+                  selectedModel={settings.selectedModel}
+                  userDataPath={settings.userDataPath}
+                  onSelectFolder={settings.handleSelectFolder}
+                />
+              </ErrorBoundary>
             }
           />
-          <Route path="/resume-editor" element={<ResumeEditorPage />} />
+          <Route 
+            path="/resume-editor" 
+            element={
+              <ErrorBoundary>
+                <ResumeEditorPage />
+              </ErrorBoundary>
+            } 
+          />
           <Route
             path="/candidature-editor"
-            element={<CandidatureEditorPage />}
+            element={
+              <ErrorBoundary>
+                <CandidatureEditorPage />
+              </ErrorBoundary>
+            }
           />
         </Routes>
       </main>

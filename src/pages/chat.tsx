@@ -1,4 +1,5 @@
-import { Message } from "@/App";
+import { Message } from "@/../shared/chat-types";
+import { Channels } from "@/../shared/ipc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,8 +16,6 @@ import {
 } from "lucide-react";
 import { useState, Dispatch, RefObject, SetStateAction } from "react";
 import Markdown from "react-markdown";
-
-const { ipcRenderer } = window.require("electron");
 
 interface IChatPage {
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -47,7 +46,7 @@ export default function ChatPage({
 
   const handleSelectFile = async () => {
     try {
-      const filePath = await ipcRenderer.invoke("select-file", {
+      const filePath = await window.api.invoke(Channels.DIALOG_SELECT_FILE, {
         filters: [{ name: "PDF Files", extensions: ["pdf"] }],
       });
       if (filePath) {

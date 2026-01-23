@@ -95,7 +95,7 @@ export interface Resume {
     version?: string;
     lastModified?: string;
     theme?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
-  [key: string]: any;
+  [key: string]: unknown;
 }

@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Resume } from "@/lib/resume-types";
 import {
   FileJson,
   RefreshCw,
@@ -18,7 +17,7 @@ import {
   Quote,
   HandHelping,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { NavButton } from "@/components/resume-editor/shared";
@@ -33,6 +32,7 @@ import { PublicationsSection } from "@/components/resume-editor/PublicationsSect
 import { LanguagesSection } from "@/components/resume-editor/LanguagesSection";
 import { InterestsSection } from "@/components/resume-editor/InterestsSection";
 import { ReferencesSection } from "@/components/resume-editor/ReferencesSection";
+import { useResume } from "@/hooks/useResume";
 
 type SectionType =
   | "basics"
@@ -48,161 +48,24 @@ type SectionType =
   | "references";
 
 export default function ResumeEditorPage() {
-  const [resume, setResume] = useState<Resume>({
-    basics: {
-      name: "",
-      label: "",
-      email: "",
-      phone: "",
-      url: "",
-      summary: "",
-      location: { city: "", countryCode: "", region: "" },
-      profiles: [],
-    },
-    work: [],
-    education: [],
-    skills: [],
-    languages: [],
-    projects: [],
-  });
+  const {
+    resume,
+    isLoading,
+    isSaving,
+    saveSuccess,
+    error,
+    loadResume,
+    saveResume,
+    updateBasics,
+    updateLocation,
+    updateProfile,
+    removeProfile,
+    addItem,
+    removeItem,
+    updateItem,
+  } = useResume();
 
   const [activeSection, setActiveSection] = useState<SectionType>("basics");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingResume, setIsLoadingResume] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadResume = async () => {
-    setIsLoadingResume(true);
-    setError(null);
-    setSaveSuccess(false);
-    try {
-      const savedResume = localStorage.getItem("worklooking_resume");
-      if (savedResume) {
-        try {
-          const parsed = JSON.parse(savedResume) as Resume;
-          setResume(parsed);
-        } catch (e) {
-          setError("Données de CV corrompues dans le stockage local.");
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load resume:", err);
-      setError("Erreur lors du chargement du CV.");
-    } finally {
-      setIsLoadingResume(false);
-    }
-  };
-
-  useEffect(() => {
-    loadResume();
-  }, []);
-
-  const saveResume = async () => {
-    setError(null);
-    setSaveSuccess(false);
-    setIsSaving(true);
-    try {
-      localStorage.setItem(
-        "worklooking_resume",
-        JSON.stringify(resume, null, 2),
-      );
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
-      console.error("Failed to save resume:", err);
-      setError("Erreur lors de l'enregistrement du CV.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const updateBasics = (field: string, value: any) => {
-    setResume((prev) => ({
-      ...prev,
-      basics: {
-        ...prev.basics,
-        [field]: value,
-      },
-    }));
-  };
-
-  const updateLocation = (field: string, value: any) => {
-    setResume((prev) => ({
-      ...prev,
-      basics: {
-        ...prev.basics,
-        location: {
-          ...prev.basics?.location,
-          [field]: value,
-        },
-      },
-    }));
-  };
-
-  const updateProfile = (index: number, field: string, value: any) => {
-    setResume((prev) => ({
-      ...prev,
-      basics: {
-        ...prev.basics,
-        profiles: prev.basics?.profiles?.map((p, i) =>
-          i === index ? { ...p, [field]: value } : p,
-        ),
-      },
-    }));
-  };
-
-  const removeProfile = (index: number) => {
-    setResume((prev) => ({
-      ...prev,
-      basics: {
-        ...prev.basics,
-        profiles: prev.basics?.profiles?.filter((_, i) => i !== index),
-      },
-    }));
-  };
-
-  // Generic array helpers
-  const addItem = (
-    section: keyof Resume | "basics_profiles",
-    defaultValue: any,
-  ) => {
-    if (section === "basics_profiles") {
-      setResume((prev) => ({
-        ...prev,
-        basics: {
-          ...prev.basics,
-          profiles: [...(prev.basics?.profiles || []), defaultValue],
-        },
-      }));
-      return;
-    }
-    setResume((prev) => ({
-      ...prev,
-      [section]: [...((prev[section] as any[]) || []), defaultValue],
-    }));
-  };
-
-  const removeItem = (section: keyof Resume, index: number) => {
-    setResume((prev) => ({
-      ...prev,
-      [section]: (prev[section] as any[]).filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateItem = (
-    section: keyof Resume,
-    index: number,
-    field: string,
-    value: any,
-  ) => {
-    setResume((prev) => ({
-      ...prev,
-      [section]: (prev[section] as any[]).map((item, i) =>
-        i === index ? { ...item, [field]: value } : item,
-      ),
-    }));
-  };
 
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
@@ -221,17 +84,17 @@ export default function ResumeEditorPage() {
             variant="outline"
             size="sm"
             onClick={loadResume}
-            disabled={isLoadingResume}
+            disabled={isLoading}
           >
             <RefreshCw
-              className={cn("w-4 h-4 mr-2", isLoadingResume && "animate-spin")}
+              className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")}
             />
             Actualiser
           </Button>
           <Button
             size="sm"
             onClick={saveResume}
-            disabled={isSaving || isLoadingResume}
+            disabled={isSaving || isLoading}
             className={cn(saveSuccess && "bg-green-600 hover:bg-green-700")}
           >
             {saveSuccess ? (

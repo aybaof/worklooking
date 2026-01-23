@@ -3,13 +3,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { MapPin, Globe, Plus, Trash2 } from "lucide-react";
 import { Field } from "./shared";
-import { Resume } from "@/lib/resume-types";
+import { Resume } from "@/../shared/resume-types";
 
 interface BasicsSectionProps {
   basics: Resume["basics"];
-  onUpdate: (field: string, value: any) => void;
-  onUpdateLocation: (field: string, value: any) => void;
-  onUpdateProfile: (index: number, field: string, value: any) => void;
+  onUpdate: (field: string, value: string | string[] | undefined) => void;
+  onUpdateLocation: (field: string, value: string | string[] | undefined) => void;
+  onUpdateProfile: (index: number, field: string, value: string | string[] | undefined) => void;
   onAddProfile: () => void;
   onRemoveProfile: (index: number) => void;
 }

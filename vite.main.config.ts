@@ -4,9 +4,9 @@ import { builtinModules } from "module";
 
 export default defineConfig({
   plugins: [{
-    name: 'markdown-loader',
+    name: 'raw-loader',
     transform(code, id) {
-      if (id.endsWith('.md')) {
+      if (id.endsWith('.md') || id.endsWith('.hbs')) {
         return `export default ${JSON.stringify(code)};`;
       }
     }
@@ -15,9 +15,12 @@ export default defineConfig({
     outDir: "dist-electron",
     emptyOutDir: false,
     lib: {
-      entry: path.resolve(__dirname, "electron/main.ts"),
+      entry: {
+        main: path.resolve(__dirname, "electron/main.ts"),
+        preload: path.resolve(__dirname, "electron/preload.ts"),
+      },
       formats: ["cjs"],
-      fileName: () => "main.js",
+      fileName: (format, entryName) => `${entryName}.js`,
     },
     rollupOptions: {
       external: [

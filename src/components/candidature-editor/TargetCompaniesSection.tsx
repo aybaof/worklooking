@@ -1,12 +1,12 @@
 import { ArraySection, Field } from "../resume-editor/shared";
-import { CandidatureConfig } from "@/lib/candidature-types";
+import { CandidatureConfig } from "@/../shared/candidature-types";
 import { Textarea } from "@/components/ui/textarea";
 
 interface TargetCompaniesSectionProps {
   items: CandidatureConfig["target_companies"];
   onAdd: () => void;
   onRemove: (index: number) => void;
-  onUpdate: (index: number, field: string, value: any) => void;
+  onUpdate: (index: number, field: string, value: string | string[] | undefined) => void;
 }
 
 export function TargetCompaniesSection({ items, onAdd, onRemove, onUpdate }: TargetCompaniesSectionProps) {

@@ -1,11 +1,11 @@
 import { ArraySection, Field } from "./shared";
-import { Resume } from "@/lib/resume-types";
+import { Resume } from "@/../shared/resume-types";
 
 interface PublicationsSectionProps {
   items: Resume["publications"];
   onAdd: () => void;
   onRemove: (index: number) => void;
-  onUpdate: (index: number, field: string, value: any) => void;
+  onUpdate: (index: number, field: string, value: string | string[] | undefined) => void;
 }
 
 export function PublicationsSection({ items, onAdd, onRemove, onUpdate }: PublicationsSectionProps) {

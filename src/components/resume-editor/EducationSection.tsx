@@ -1,12 +1,12 @@
 import { Input } from "@/components/ui/input";
 import { ArraySection, Field } from "./shared";
-import { Resume } from "@/lib/resume-types";
+import { Resume } from "@/../shared/resume-types";
 
 interface EducationSectionProps {
   items: Resume["education"];
   onAdd: () => void;
   onRemove: (index: number) => void;
-  onUpdate: (index: number, field: string, value: any) => void;
+  onUpdate: (index: number, field: string, value: string | string[] | undefined) => void;
 }
 
 export function EducationSection({ items, onAdd, onRemove, onUpdate }: EducationSectionProps) {

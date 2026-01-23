@@ -1,12 +1,12 @@
 import { Textarea } from "@/components/ui/textarea";
 import { ArraySection, Field } from "./shared";
-import { Resume } from "@/lib/resume-types";
+import { Resume } from "@/../shared/resume-types";
 
 interface WorkSectionProps {
   items: Resume["work"];
   onAdd: () => void;
   onRemove: (index: number) => void;
-  onUpdate: (index: number, field: string, value: any) => void;
+  onUpdate: (index: number, field: string, value: string | string[] | undefined) => void;
 }
 
 export function WorkSection({ items, onAdd, onRemove, onUpdate }: WorkSectionProps) {

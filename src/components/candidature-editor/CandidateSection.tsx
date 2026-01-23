@@ -2,13 +2,13 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import { Field } from "../resume-editor/shared";
-import { CandidatureConfig } from "@/lib/candidature-types";
+import { CandidatureConfig } from "@/../shared/candidature-types";
 import { Textarea } from "@/components/ui/textarea";
 
 interface CandidateSectionProps {
   candidate: CandidatureConfig["candidate"];
-  onUpdate: (field: string, value: any) => void;
-  onUpdateSkill: (index: number, field: string, value: any) => void;
+  onUpdate: (field: string, value: string | string[] | undefined) => void;
+  onUpdateSkill: (index: number, field: string, value: string | string[] | undefined) => void;
   onAddSkill: () => void;
   onRemoveSkill: (index: number) => void;
   onUpdateStrengths: (value: string[]) => void;

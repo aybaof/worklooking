@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { CandidatureConfig } from "@/lib/candidature-types";
 import {
   FileJson,
   RefreshCw,
@@ -11,7 +10,7 @@ import {
   Building2,
   Briefcase,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { NavButton } from "@/components/resume-editor/shared";
@@ -19,181 +18,31 @@ import { CandidateSection } from "@/components/candidature-editor/CandidateSecti
 import { GoalsSection } from "@/components/candidature-editor/GoalsSection";
 import { TargetCompaniesSection } from "@/components/candidature-editor/TargetCompaniesSection";
 import { ApplicationsSection } from "@/components/candidature-editor/ApplicationsSection";
-
-const { ipcRenderer } = window.require("electron");
+import { useCandidatureConfig } from "@/hooks/useCandidatureConfig";
 
 type SectionType = "candidate" | "goals" | "target_companies" | "applications";
 
 export default function CandidatureEditorPage() {
-  const [config, setConfig] = useState<CandidatureConfig>({
-    candidate: {
-      name: "",
-      position: "",
-      location: "",
-      experience: "",
-      languages: [],
-      skills: [],
-      strengths: [],
-    },
-    goals: {
-      salary_target: "",
-      contract_type: "",
-      remote_policy: "",
-      criteria: [],
-    },
-    target_companies: [],
-    applications: [],
-  });
+  const {
+    config,
+    setConfig,
+    isLoading,
+    isSaving,
+    saveSuccess,
+    error,
+    loadConfig,
+    saveConfig,
+    updateCandidate,
+    updateCandidateSkill,
+    addCandidateSkill,
+    removeCandidateSkill,
+    updateGoals,
+    addItem,
+    removeItem,
+    updateItem,
+  } = useCandidatureConfig();
 
   const [activeSection, setActiveSection] = useState<SectionType>("candidate");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadConfig = async () => {
-    setIsLoading(true);
-    setError(null);
-    setSaveSuccess(false);
-
-    // 1. Try LocalStorage
-    const savedConfig = localStorage.getItem("worklooking_candidature_config");
-    if (savedConfig) {
-      try {
-        const parsed = JSON.parse(savedConfig) as CandidatureConfig;
-        setConfig(parsed);
-        setIsLoading(false);
-        return;
-      } catch (e) {
-        console.error("Failed to parse config from localStorage", e);
-      }
-    }
-
-    // 2. Fallback to Disk (Migration)
-    try {
-      const response = await ipcRenderer.invoke("read-file", {
-        filePath: "candidature_config.json",
-      });
-      if (response.content) {
-        try {
-          const parsed = JSON.parse(response.content) as CandidatureConfig;
-          setConfig(parsed);
-          localStorage.setItem("worklooking_candidature_config", response.content);
-        } catch (e) {
-          setError("Fichier corrompu ou JSON invalide sur le disque.");
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load config:", err);
-      // Not necessarily an error if it's the first time
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadConfig();
-  }, []);
-
-  const saveConfig = async () => {
-    setError(null);
-    setSaveSuccess(false);
-    setIsSaving(true);
-    try {
-      localStorage.setItem(
-        "worklooking_candidature_config",
-        JSON.stringify(config, null, 2),
-      );
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err) {
-      console.error("Failed to save config:", err);
-      setError("Erreur lors de l'enregistrement en local.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const updateCandidate = (field: string, value: any) => {
-    setConfig((prev) => ({
-      ...prev,
-      candidate: { ...prev.candidate, [field]: value },
-    }));
-  };
-
-  const updateCandidateSkill = (index: number, field: string, value: any) => {
-    setConfig((prev) => ({
-      ...prev,
-      candidate: {
-        ...prev.candidate,
-        skills: prev.candidate.skills.map((s, i) =>
-          i === index ? { ...s, [field]: value } : s,
-        ),
-      },
-    }));
-  };
-
-  const addCandidateSkill = () => {
-    setConfig((prev) => ({
-      ...prev,
-      candidate: {
-        ...prev.candidate,
-        skills: [...prev.candidate.skills, { category: "", technologies: "" }],
-      },
-    }));
-  };
-
-  const removeCandidateSkill = (index: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      candidate: {
-        ...prev.candidate,
-        skills: prev.candidate.skills.filter((_, i) => i !== index),
-      },
-    }));
-  };
-
-  const updateGoals = (field: string, value: any) => {
-    setConfig((prev) => ({
-      ...prev,
-      goals: { ...prev.goals, [field]: value },
-    }));
-  };
-
-  // Generic array helpers
-  const addItem = (
-    section: "target_companies" | "applications",
-    defaultValue: any,
-  ) => {
-    setConfig((prev) => ({
-      ...prev,
-      [section]: [...prev[section], defaultValue],
-    }));
-  };
-
-  const removeItem = (
-    section: "target_companies" | "applications",
-    index: number,
-  ) => {
-    setConfig((prev) => ({
-      ...prev,
-      [section]: prev[section].filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateItem = (
-    section: "target_companies" | "applications",
-    index: number,
-    field: string,
-    value: any,
-  ) => {
-    setConfig((prev) => ({
-      ...prev,
-      [section]: (prev[section] as any[]).map((item, i) =>
-        i === index ? { ...item, [field]: value } : item,
-      ),
-    }));
-  };
 
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
