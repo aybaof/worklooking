@@ -1,31 +1,42 @@
-import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, dialog } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  IpcMainInvokeEvent,
+  dialog,
+} from "electron";
 import path from "path";
 import fs from "fs";
 import OpenAI from "openai";
 import { PDFParse } from "pdf-parse";
 import { tools } from "./agent/tools";
 import { GenerateSystemPrompt } from "./agent/prompt";
-import { renderTheme } from "./themes/shared/render"
+import { renderTheme } from "./themes/shared/render";
 import { Channels, ErrorCodes } from "../shared/ipc";
 import { Resume } from "../shared/resume-types";
 import { CandidatureConfig } from "../shared/candidature-types";
 import { updateElectronApp } from "update-electron-app";
 
+// Only check for updates in production
+if (app.isPackaged) {
+  updateElectronApp();
+}
 
-updateElectronApp();
-
-if (require('electron-squirrel-startup')) app.quit();
+if (require("electron-squirrel-startup")) app.quit();
 
 class IPCError extends Error {
-  constructor(public code: string, message: string) {
+  constructor(
+    public code: string,
+    message: string,
+  ) {
     super(message);
-    this.name = 'IPCError';
+    this.name = "IPCError";
   }
 }
 
 function validateAndSanitizePath(filePath: string, basePath: string): string {
   if (!filePath) {
-    throw new IPCError(ErrorCodes.INVALID_PATH, 'Path is required');
+    throw new IPCError(ErrorCodes.INVALID_PATH, "Path is required");
   }
 
   const resolvedPath = path.isAbsolute(filePath)
@@ -36,7 +47,7 @@ function validateAndSanitizePath(filePath: string, basePath: string): string {
 
   // Prevent directory traversal
   if (!normalizedPath.startsWith(basePath) && !path.isAbsolute(filePath)) {
-    throw new IPCError(ErrorCodes.INVALID_PATH, 'Path traversal not allowed');
+    throw new IPCError(ErrorCodes.INVALID_PATH, "Path traversal not allowed");
   }
 
   return normalizedPath;
@@ -59,7 +70,6 @@ interface PdfArgs {
   pdfPath: string;
 }
 
-
 interface ChatArgs {
   messages: OpenAI.Chat.ChatCompletionMessageParam[];
   apiKey: string;
@@ -70,7 +80,13 @@ interface ChatArgs {
 
 // --- Core Functionality ---
 
-async function writeFile({ filePath, content }: { filePath: string; content: string }): Promise<{ success: boolean; path: string }> {
+async function writeFile({
+  filePath,
+  content,
+}: {
+  filePath: string;
+  content: string;
+}): Promise<{ success: boolean; path: string }> {
   const fullPath = validateAndSanitizePath(filePath, USER_DATA_PATH);
   fs.mkdirSync(path.dirname(fullPath), { recursive: true });
   fs.writeFileSync(fullPath, content);
@@ -88,11 +104,15 @@ async function renderResume({ resumeJson }: ResumeArgs): Promise<string> {
   }
 }
 
-async function fetchUrl(url: string): Promise<{ success: boolean; content?: string; error?: string }> {
+async function fetchUrl(
+  url: string,
+): Promise<{ success: boolean; content?: string; error?: string }> {
   const win = new BrowserWindow({ show: false });
   try {
     await win.loadURL(url);
-    const content = await win.webContents.executeJavaScript("document.body.innerText");
+    const content = await win.webContents.executeJavaScript(
+      "document.body.innerText",
+    );
     return { success: true, content: content.substring(0, 50000) };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -102,21 +122,30 @@ async function fetchUrl(url: string): Promise<{ success: boolean; content?: stri
   }
 }
 
-async function readPdf(filePath: string): Promise<{ success: boolean; text?: string; error?: string }> {
+async function readPdf(
+  filePath: string,
+): Promise<{ success: boolean; text?: string; error?: string }> {
   try {
     const fullPath = validateAndSanitizePath(filePath, USER_DATA_PATH);
-    if (!fs.existsSync(fullPath)) return { success: false, error: "File not found" };
-    const parser = new PDFParse({ url: fullPath })
-    const result = await parser.getText()
-    await parser.destroy()
-    return { success: true, text: typeof result === 'string' ? result : (result as any).text };
+    if (!fs.existsSync(fullPath))
+      return { success: false, error: "File not found" };
+    const parser = new PDFParse({ url: fullPath });
+    const result = await parser.getText();
+    await parser.destroy();
+    return {
+      success: true,
+      text: typeof result === "string" ? result : (result as any).text,
+    };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return { success: false, error: message };
   }
 }
 
-async function generatePdf({ htmlPath, pdfPath }: PdfArgs): Promise<{ success: boolean; path?: string; error?: string }> {
+async function generatePdf({
+  htmlPath,
+  pdfPath,
+}: PdfArgs): Promise<{ success: boolean; path?: string; error?: string }> {
   try {
     const fullHtmlPath = validateAndSanitizePath(htmlPath, USER_DATA_PATH);
     const fullPdfPath = validateAndSanitizePath(pdfPath, USER_DATA_PATH);
@@ -131,7 +160,7 @@ async function generatePdf({ htmlPath, pdfPath }: PdfArgs): Promise<{ success: b
         top: 0,
         bottom: 0,
         left: 0,
-        right: 0
+        right: 0,
       },
       preferCSSPageSize: true,
       scale: 1.0,
@@ -164,7 +193,7 @@ ipcMain.handle(Channels.APP_SET_USER_DATA_PATH, (_event, newPath: string) => {
     return {
       success: false,
       error: message,
-      code: e instanceof IPCError ? e.code : 'UNKNOWN_ERROR'
+      code: e instanceof IPCError ? e.code : "UNKNOWN_ERROR",
     };
   }
 });
@@ -177,48 +206,64 @@ ipcMain.handle(Channels.DIALOG_SELECT_FOLDER, async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle(Channels.DIALOG_SELECT_FILE, async (_event, { filters }: { filters?: Array<{ name: string; extensions: string[] }> } = {}) => {
-  const result = await dialog.showOpenDialog({
-    properties: ["openFile"],
-    filters: filters || [{ name: "All Files", extensions: ["*"] }],
-  });
-  if (result.canceled) return null;
-  return result.filePaths[0];
-});
+ipcMain.handle(
+  Channels.DIALOG_SELECT_FILE,
+  async (
+    _event,
+    {
+      filters,
+    }: { filters?: Array<{ name: string; extensions: string[] }> } = {},
+  ) => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: filters || [{ name: "All Files", extensions: ["*"] }],
+    });
+    if (result.canceled) return null;
+    return result.filePaths[0];
+  },
+);
 
-ipcMain.handle(Channels.FILE_READ, async (_event, { filePath }: { filePath: string }) => {
-  try {
-    const safePath = validateAndSanitizePath(filePath, USER_DATA_PATH);
-    if (!fs.existsSync(safePath)) {
-      throw new IPCError(ErrorCodes.FILE_NOT_FOUND, 'File not found');
+ipcMain.handle(
+  Channels.FILE_READ,
+  async (_event, { filePath }: { filePath: string }) => {
+    try {
+      const safePath = validateAndSanitizePath(filePath, USER_DATA_PATH);
+      if (!fs.existsSync(safePath)) {
+        throw new IPCError(ErrorCodes.FILE_NOT_FOUND, "File not found");
+      }
+      const content = fs.readFileSync(safePath, "utf-8");
+      return { content };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return {
+        error: message,
+        code: e instanceof IPCError ? e.code : "UNKNOWN_ERROR",
+      };
     }
-    const content = fs.readFileSync(safePath, "utf-8");
-    return { content };
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
-    return {
-      error: message,
-      code: e instanceof IPCError ? e.code : 'UNKNOWN_ERROR'
-    };
-  }
-});
+  },
+);
 
-ipcMain.handle(Channels.FILE_WRITE, async (_event, { filePath, content }: { filePath: string, content: string }) => {
-  try {
-    const safePath = validateAndSanitizePath(filePath, USER_DATA_PATH);
-    fs.mkdirSync(path.dirname(safePath), { recursive: true });
-    fs.writeFileSync(safePath, content);
-    return { success: true, path: safePath };
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      error: message,
-      code: e instanceof IPCError ? e.code : ErrorCodes.WRITE_FAILED
-    };
-  }
-});
-
+ipcMain.handle(
+  Channels.FILE_WRITE,
+  async (
+    _event,
+    { filePath, content }: { filePath: string; content: string },
+  ) => {
+    try {
+      const safePath = validateAndSanitizePath(filePath, USER_DATA_PATH);
+      fs.mkdirSync(path.dirname(safePath), { recursive: true });
+      fs.writeFileSync(safePath, content);
+      return { success: true, path: safePath };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return {
+        success: false,
+        error: message,
+        code: e instanceof IPCError ? e.code : ErrorCodes.WRITE_FAILED,
+      };
+    }
+  },
+);
 
 async function readFile({ filePath }: { filePath: string }) {
   try {
@@ -235,8 +280,12 @@ async function readFile({ filePath }: { filePath: string }) {
 async function executeTool(
   name: string,
   args: any,
-  event: IpcMainInvokeEvent
-): Promise<{ result: unknown; updatedResume?: Resume; updatedConfig?: CandidatureConfig }> {
+  event: IpcMainInvokeEvent,
+): Promise<{
+  result: unknown;
+  updatedResume?: Resume;
+  updatedConfig?: CandidatureConfig;
+}> {
   let result: unknown;
   let updatedResume: Resume | undefined;
   let updatedConfig: CandidatureConfig | undefined;
@@ -259,11 +308,19 @@ async function executeTool(
       break;
     case "save_source_resume":
       updatedResume = args.resumeJson;
-      result = { success: true, message: "Source resume updated in memory. It will be persisted by the frontend." };
+      result = {
+        success: true,
+        message:
+          "Source resume updated in memory. It will be persisted by the frontend.",
+      };
       break;
     case "save_candidature_config":
       updatedConfig = args.config;
-      result = { success: true, message: "Configuration updated in memory. It will be persisted by the frontend." };
+      result = {
+        success: true,
+        message:
+          "Configuration updated in memory. It will be persisted by the frontend.",
+      };
       break;
     case "read_pdf":
       result = await readPdf(args.filePath);
@@ -275,87 +332,114 @@ async function executeTool(
   return { result, updatedResume, updatedConfig };
 }
 
-ipcMain.handle(Channels.AI_CHAT, async (_event: IpcMainInvokeEvent, { messages, apiKey, model, resumeJson, configJson }: ChatArgs) => {
-  const client = new OpenAI({
-    apiKey: apiKey,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-  });
-
-  try {
-    const configSourceJson = configJson || "No config found. Perform initialization.";
-    const resumeSourceJson = resumeJson || "No source resume JSON provided.";
-
-    const systemPrompt = GenerateSystemPrompt(configSourceJson, resumeSourceJson);
-
-    let finalResume: Resume | null = null;
-    let finalConfig: CandidatureConfig | null = null;
-
-    let currentMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt },
-      ...messages,
-    ];
-
-    let response = await client.chat.completions.create({
-      model: model,
-      messages: currentMessages,
-      tools: tools,
+ipcMain.handle(
+  Channels.AI_CHAT,
+  async (
+    _event: IpcMainInvokeEvent,
+    { messages, apiKey, model, resumeJson, configJson }: ChatArgs,
+  ) => {
+    const client = new OpenAI({
+      apiKey: apiKey,
+      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
     });
 
-    if (!response.choices || response.choices.length === 0) {
-      throw new Error("No response from AI agent");
-    }
+    try {
+      const configSourceJson =
+        configJson || "No config found. Perform initialization.";
+      const resumeSourceJson = resumeJson || "No source resume JSON provided.";
 
-    let assistantMessage = response.choices[0].message;
+      const systemPrompt = GenerateSystemPrompt(
+        configSourceJson,
+        resumeSourceJson,
+      );
 
-    while (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-      if (assistantMessage.content) {
-        _event.sender.send(Channels.CHAT_UPDATE, { content: assistantMessage.content });
-      }
-      currentMessages.push(assistantMessage);
+      let finalResume: Resume | null = null;
+      let finalConfig: CandidatureConfig | null = null;
 
-      for (const toolCall of assistantMessage.tool_calls) {
-        if (toolCall.type !== "function") continue;
-        const name = toolCall.function.name;
-        const args = JSON.parse(toolCall.function.arguments);
+      let currentMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        { role: "system", content: systemPrompt },
+        ...messages,
+      ];
 
-        _event.sender.send(Channels.TOOL_STATUS, { name, status: "start", args });
-
-        const { result, updatedResume, updatedConfig } = await executeTool(name, args, _event);
-
-        if (updatedResume) finalResume = updatedResume;
-        if (updatedConfig) finalConfig = updatedConfig;
-
-        _event.sender.send(Channels.TOOL_STATUS, { name, status: "end", result });
-
-        currentMessages.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(result),
-        });
-      }
-
-      response = await client.chat.completions.create({
+      let response = await client.chat.completions.create({
         model: model,
         messages: currentMessages,
         tools: tools,
       });
 
       if (!response.choices || response.choices.length === 0) {
-        throw new Error("No response from AI agent during tool execution");
+        throw new Error("No response from AI agent");
       }
-      assistantMessage = response.choices[0].message;
-    }
 
-    return {
-      content: assistantMessage.content || "No content returned",
-      updatedResume: finalResume,
-      updatedConfig: finalConfig
-    };
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { error: message };
-  }
-});
+      let assistantMessage = response.choices[0].message;
+
+      while (
+        assistantMessage.tool_calls &&
+        assistantMessage.tool_calls.length > 0
+      ) {
+        if (assistantMessage.content) {
+          _event.sender.send(Channels.CHAT_UPDATE, {
+            content: assistantMessage.content,
+          });
+        }
+        currentMessages.push(assistantMessage);
+
+        for (const toolCall of assistantMessage.tool_calls) {
+          if (toolCall.type !== "function") continue;
+          const name = toolCall.function.name;
+          const args = JSON.parse(toolCall.function.arguments);
+
+          _event.sender.send(Channels.TOOL_STATUS, {
+            name,
+            status: "start",
+            args,
+          });
+
+          const { result, updatedResume, updatedConfig } = await executeTool(
+            name,
+            args,
+            _event,
+          );
+
+          if (updatedResume) finalResume = updatedResume;
+          if (updatedConfig) finalConfig = updatedConfig;
+
+          _event.sender.send(Channels.TOOL_STATUS, {
+            name,
+            status: "end",
+            result,
+          });
+
+          currentMessages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result),
+          });
+        }
+
+        response = await client.chat.completions.create({
+          model: model,
+          messages: currentMessages,
+          tools: tools,
+        });
+
+        if (!response.choices || response.choices.length === 0) {
+          throw new Error("No response from AI agent during tool execution");
+        }
+        assistantMessage = response.choices[0].message;
+      }
+
+      return {
+        content: assistantMessage.content || "No content returned",
+        updatedResume: finalResume,
+        updatedConfig: finalConfig,
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { error: message };
+    }
+  },
+);
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -365,7 +449,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
