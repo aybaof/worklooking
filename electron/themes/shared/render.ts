@@ -9,10 +9,6 @@ export const renderTheme = (themeName: ThemeName, resumeData: any): string => {
     throw new Error(`Unknown theme: ${themeName}`);
   }
 
-  // Debug: Log image data length before compilation
-  const imageLength = resumeData?.basics?.image?.length || 0;
-  console.log(`[renderTheme] Image data length before compile: ${imageLength}`);
-
   // Compile and render the template
   const html = Handlebars.compile(theme.template)({
     css: theme.styles,

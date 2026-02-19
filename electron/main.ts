@@ -58,6 +58,7 @@ function validateAndSanitizePath(filePath: string, basePath: string): string {
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 let USER_DATA_PATH = app.getPath("userData");
 const APP_PATH = app.getAppPath();
+const FETCH_SESSION_PARTITION = "persist:worklooking-fetch";
 
 // --- Types ---
 
@@ -105,19 +106,143 @@ async function renderResume({ resumeJson }: ResumeArgs): Promise<string> {
   }
 }
 
+function detectsAuthRequired(
+  initialUrl: string,
+  finalUrl: string,
+  pageTitle: string,
+): boolean {
+  // Conservative detection: only flag if we're very confident
+  const finalUrlLower = finalUrl.toLowerCase();
+  const titleLower = pageTitle.toLowerCase();
+
+  // Check 1: Explicit auth paths in URL
+  const authPaths = ["/login", "/signin", "/sign-in", "/auth", "/authenticate"];
+  if (authPaths.some((path) => finalUrlLower.includes(path))) {
+    return true;
+  }
+
+  // Check 2: Redirected to different domain with "login" in it
+  try {
+    const initialDomain = new URL(initialUrl).hostname;
+    const finalDomain = new URL(finalUrl).hostname;
+    if (
+      initialDomain !== finalDomain &&
+      (finalUrlLower.includes("login") || finalUrlLower.includes("signin"))
+    ) {
+      return true;
+    }
+  } catch (e) {
+    // Invalid URL, ignore this check
+  }
+
+  // Check 3: Page title explicitly mentions login/sign in
+  if (
+    titleLower.includes("sign in") ||
+    titleLower.includes("log in") ||
+    titleLower === "login"
+  ) {
+    return true;
+  }
+
+  return false; // Conservative: if unsure, assume no auth needed
+}
+
 async function fetchUrl(
   url: string,
-): Promise<{ success: boolean; content?: string; error?: string }> {
-  const win = new BrowserWindow({ show: false });
+  options: { waitForSelector?: string } = {},
+): Promise<{
+  success: boolean;
+  content?: string;
+  error?: string;
+  errorCode?: string;
+  needsAuth?: boolean;
+  finalUrl?: string;
+}> {
+  const win = new BrowserWindow({
+    show: false, // Always hidden
+    width: 1200,
+    height: 800,
+    webPreferences: {
+      partition: FETCH_SESSION_PARTITION, // Global persistent session for cookies
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  let finalUrl = url;
+
   try {
+    // Track navigation for redirect detection
+    win.webContents.on("did-navigate", (_, navigationUrl) => {
+      finalUrl = navigationUrl;
+    });
+
+    win.webContents.on("did-navigate-in-page", (_, navigationUrl) => {
+      finalUrl = navigationUrl;
+    });
+
+    // Load URL
     await win.loadURL(url);
+
+    // Optional: wait for specific selector (30 second timeout)
+    if (options.waitForSelector) {
+      try {
+        await win.webContents.executeJavaScript(`
+          new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject('Selector timeout'), 30000);
+            const check = () => {
+              if (document.querySelector('${options.waitForSelector.replace(/'/g, "\\'")}')) {
+                clearTimeout(timeout);
+                resolve();
+              } else {
+                setTimeout(check, 100);
+              }
+            };
+            check();
+          })
+        `);
+      } catch (selectorError) {
+        // Selector timeout - continue anyway
+        console.warn(
+          `Selector "${options.waitForSelector}" not found within timeout`,
+        );
+      }
+    }
+
+    // Get page title for auth detection
+    const pageTitle = await win.webContents.getTitle();
+
+    // Conservative auth detection
+    const needsAuth = detectsAuthRequired(url, finalUrl, pageTitle);
+
+    if (needsAuth) {
+      return {
+        success: false,
+        needsAuth: true,
+        finalUrl,
+        error:
+          "Authentication required. This URL requires login. Please fetch it from a browser or provide pre-authenticated cookies.",
+        errorCode: ErrorCodes.FETCH_NEEDS_AUTH,
+      };
+    }
+
+    // Extract content
     const content = await win.webContents.executeJavaScript(
       "document.body.innerText",
     );
-    return { success: true, content: content.substring(0, 50000) };
+
+    return {
+      success: true,
+      content: content.substring(0, 50000),
+      finalUrl,
+    };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return { success: false, error: message };
+    return {
+      success: false,
+      error: message,
+      errorCode: ErrorCodes.FETCH_NETWORK_ERROR,
+    };
   } finally {
     win.destroy();
   }
@@ -342,7 +467,9 @@ async function executeTool(
       result = await generatePdf(args);
       break;
     case "fetch_url":
-      result = await fetchUrl(args.url);
+      result = await fetchUrl(args.url, {
+        waitForSelector: args.waitForSelector,
+      });
       break;
     case "save_source_resume":
       // Always use source basics to preserve image and personal data

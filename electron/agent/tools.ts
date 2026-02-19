@@ -22,13 +22,15 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "save_candidature_config",
-      description: "Sauvegarde la configuration globale de candidature (profil, objectifs, entreprises cibles, suivi). À utiliser pour toute modification du profil ou du suivi des candidatures.",
+      description:
+        "Sauvegarde la configuration globale de candidature (profil, objectifs, entreprises cibles, suivi). À utiliser pour toute modification du profil ou du suivi des candidatures.",
       parameters: {
         type: "object",
         properties: {
           config: {
             type: "object",
-            description: "L'objet de configuration complet au format CandidatureConfig.",
+            description:
+              "L'objet de configuration complet au format CandidatureConfig.",
           },
         },
         required: ["config"],
@@ -74,11 +76,20 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "fetch_url",
-      description: "Récupère le contenu texte d'une URL (offre d'emploi, site entreprise).",
+      description:
+        "Récupère le contenu texte d'une URL (offre d'emploi, site entreprise). Utilise une session persistante pour préserver les cookies entre les appels. Si l'URL nécessite une authentification, la fonction retournera needsAuth: true avec un message d'erreur.",
       parameters: {
         type: "object",
         properties: {
-          url: { type: "string", description: "L'URL à consulter" },
+          url: {
+            type: "string",
+            description: "L'URL à consulter",
+          },
+          waitForSelector: {
+            type: "string",
+            description:
+              "Optionnel: attend qu'un sélecteur CSS spécifique soit présent avant d'extraire le contenu (timeout 30s).",
+          },
         },
         required: ["url"],
       },
@@ -109,7 +120,8 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "save_source_resume",
-      description: "Sauvegarde le CV source principal. À utiliser uniquement pour le CV de base, pas pour les versions adaptées aux offres.",
+      description:
+        "Sauvegarde le CV source principal. À utiliser uniquement pour le CV de base, pas pour les versions adaptées aux offres.",
       parameters: {
         type: "object",
         properties: {
