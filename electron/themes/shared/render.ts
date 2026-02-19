@@ -3,20 +3,44 @@ import Handlebars from "handlebars";
 import moment from "moment";
 import { themes, ThemeName } from "../index";
 
-export const renderTheme = (themeName: ThemeName, resumeData: object): string => {
+export const renderTheme = (themeName: ThemeName, resumeData: any): string => {
   const theme = themes[themeName];
   if (!theme) {
     throw new Error(`Unknown theme: ${themeName}`);
   }
 
+  // Debug: Log image data length before compilation
+  const imageLength = resumeData?.basics?.image?.length || 0;
+  console.log(`[renderTheme] Image data length before compile: ${imageLength}`);
+
   // Compile and render the template
-  return Handlebars.compile(theme.template)({
+  const html = Handlebars.compile(theme.template)({
     css: theme.styles,
     resume: resumeData,
   });
+
+  // Debug: Check if image is in the output
+  const imgMatch = html.match(/src="data:image[^"]+"/);
+  if (imgMatch) {
+    console.log(
+      `[renderTheme] Image src length in HTML: ${imgMatch[0].length}`,
+    );
+  } else {
+    console.warn(`[renderTheme] No image found in HTML output!`);
+  }
+
+  return html;
 };
 
 // Register Handlebars helpers (shared between all themes)
+
+// Helper to safely output base64 image data without truncation
+Handlebars.registerHelper("safeImage", function (imageData: string) {
+  if (!imageData) return "";
+  // Return as SafeString to prevent escaping and truncation
+  return new Handlebars.SafeString(imageData);
+});
+
 Handlebars.registerHelper("paragraphSplit", function (plaintext: string) {
   const lines = plaintext.split(/\r\n|\r|\n/g);
   let output = "";

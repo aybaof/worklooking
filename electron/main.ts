@@ -16,6 +16,7 @@ import { Channels, ErrorCodes } from "../shared/ipc";
 import { Resume } from "../shared/resume-types";
 import { CandidatureConfig } from "../shared/candidature-types";
 import { updateElectronApp } from "update-electron-app";
+import { processImage } from "./utils/image-processor";
 
 // Only check for updates in production
 if (app.isPackaged) {
@@ -223,6 +224,36 @@ ipcMain.handle(
   },
 );
 
+// Image selection and optimization handler
+ipcMain.handle(Channels.IMAGE_SELECT_AND_OPTIMIZE, async () => {
+  try {
+    // Open file dialog for image selection
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [
+        {
+          name: "Images",
+          extensions: ["jpg", "jpeg", "png", "gif", "webp", "bmp"],
+        },
+      ],
+    });
+
+    if (result.canceled || !result.filePaths[0]) {
+      return { success: false, error: "No file selected" };
+    }
+
+    const filePath = result.filePaths[0];
+
+    // Process and optimize the image
+    const processResult = await processImage(filePath);
+
+    return processResult;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, error: message };
+  }
+});
+
 ipcMain.handle(
   Channels.FILE_READ,
   async (_event, { filePath }: { filePath: string }) => {
@@ -281,6 +312,8 @@ async function executeTool(
   name: string,
   args: any,
   event: IpcMainInvokeEvent,
+  sourceResume?: Resume,
+  sourceConfig?: CandidatureConfig,
 ): Promise<{
   result: unknown;
   updatedResume?: Resume;
@@ -298,6 +331,11 @@ async function executeTool(
       result = await readFile(args);
       break;
     case "render_resume":
+      // Always use source basics to preserve image and personal data
+      // The LLM should not modify the basics section
+      if (sourceResume?.basics && args.resumeJson) {
+        args.resumeJson.basics = sourceResume.basics;
+      }
       result = await renderResume(args);
       break;
     case "generate_pdf":
@@ -307,6 +345,11 @@ async function executeTool(
       result = await fetchUrl(args.url);
       break;
     case "save_source_resume":
+      // Always use source basics to preserve image and personal data
+      // The LLM should not modify the basics section
+      if (sourceResume?.basics && args.resumeJson) {
+        args.resumeJson.basics = sourceResume.basics;
+      }
       updatedResume = args.resumeJson;
       result = {
         success: true,
@@ -347,6 +390,29 @@ ipcMain.handle(
       const configSourceJson =
         configJson || "No config found. Perform initialization.";
       const resumeSourceJson = resumeJson || "No source resume JSON provided.";
+
+      // Parse the source resume and config to pass to tools
+      let sourceResume: Resume | undefined;
+      let sourceConfig: CandidatureConfig | undefined;
+
+      if (resumeJson && resumeJson !== "No source resume JSON provided.") {
+        try {
+          sourceResume = JSON.parse(resumeJson);
+        } catch (e) {
+          console.warn("Failed to parse source resume JSON:", e);
+        }
+      }
+
+      if (
+        configJson &&
+        configJson !== "No config found. Perform initialization."
+      ) {
+        try {
+          sourceConfig = JSON.parse(configJson);
+        } catch (e) {
+          console.warn("Failed to parse source config JSON:", e);
+        }
+      }
 
       const systemPrompt = GenerateSystemPrompt(
         configSourceJson,
@@ -399,10 +465,18 @@ ipcMain.handle(
             name,
             args,
             _event,
+            sourceResume,
+            sourceConfig,
           );
 
-          if (updatedResume) finalResume = updatedResume;
-          if (updatedConfig) finalConfig = updatedConfig;
+          if (updatedResume) {
+            finalResume = updatedResume;
+            sourceResume = updatedResume; // Update for next tool calls
+          }
+          if (updatedConfig) {
+            finalConfig = updatedConfig;
+            sourceConfig = updatedConfig; // Update for next tool calls
+          }
 
           _event.sender.send(Channels.TOOL_STATUS, {
             name,

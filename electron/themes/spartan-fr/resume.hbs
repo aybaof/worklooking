@@ -14,8 +14,8 @@
 		<div id="resume">
 			{{#resume.basics}}
 				<header id="header">
-					{{#if picture}}
-						<img src="{{picture}}" alt="{{name}}"/>
+					{{#if image}}
+						<img src="{{safeImage image}}" alt="{{name}}"/>
 						<div class="middle">
 							<h1 class="name">{{name}}</h1>
 							<h2 class="label">{{label}}</h2>
