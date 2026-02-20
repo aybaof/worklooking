@@ -1,7 +1,11 @@
 // Shared theme rendering function
 import Handlebars from "handlebars";
 import moment from "moment";
+import "moment/locale/fr";
 import { themes, ThemeName } from "../index";
+
+// Configure moment.js to use French locale
+moment.locale("fr");
 
 export const renderTheme = (themeName: ThemeName, resumeData: any): string => {
   const theme = themes[themeName];
@@ -36,8 +40,8 @@ Handlebars.registerHelper("safeImage", function (imageData: string) {
   // Ensure the string is treated as-is without any processing
   // Use SafeString to prevent HTML escaping
   // Handlebars can truncate long strings, so we explicitly mark it as safe
-  const value = new Handlebars.SafeString(imageData)
-  return value
+  const value = new Handlebars.SafeString(imageData);
+  return value;
 });
 
 Handlebars.registerHelper("paragraphSplit", function (plaintext: string) {

@@ -30,7 +30,7 @@ body {
     -apple-system,
     BlinkMacSystemFont,
     sans-serif;
-  font-size: 10pt;
+  font-size: 10.5pt;
   line-height: 1.5;
   color: var(--text-dark);
   background: var(--bg-main);
@@ -49,12 +49,12 @@ body {
   min-width: 280px;
   background: var(--bg-sidebar);
   color: var(--text-light);
-  padding: 20px 20px;
+  padding: 25px 25px;
 }
 
 .photo {
   text-align: center;
-  margin-bottom: 15px;
+  margin-bottom: 25px;
 }
 
 .photo img {
@@ -66,14 +66,14 @@ body {
 }
 
 .sidebar-section {
-  margin-bottom: 15px;
+  margin-bottom: 25px;
 }
 
 .sidebar-section h3 {
-  font-size: 11pt;
+  font-size: 12pt;
   font-weight: 600;
   color: var(--primary-light);
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   padding-bottom: 6px;
   border-bottom: 2px solid var(--primary);
   display: flex;
@@ -89,8 +89,8 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
-  font-size: 9pt;
+  margin-bottom: 10px;
+  font-size: 9.5pt;
 }
 
 .contact-item i {
@@ -109,11 +109,11 @@ body {
 
 /* Skills */
 .skill-group {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .skill-group h4 {
-  font-size: 9pt;
+  font-size: 9.5pt;
   font-weight: 500;
   color: var(--text-light);
   margin-bottom: 6px;
@@ -139,7 +139,7 @@ body {
   display: flex;
   justify-content: space-between;
   margin-bottom: 6px;
-  font-size: 9pt;
+  font-size: 9.5pt;
 }
 
 .language-level {
@@ -165,35 +165,35 @@ body {
 /* Main Content */
 .main-content {
   flex: 1;
-  padding: 20px 30px;
+  padding: 30px 40px;
   background: var(--bg-main);
 }
 
 .header {
-  margin-bottom: 15px;
+  margin-bottom: 25px;
   padding-bottom: 10px;
   border-bottom: 2px solid var(--primary);
 }
 
 .header h1 {
-  font-size: 20pt;
+  font-size: 22pt;
   font-weight: 700;
   color: var(--text-dark);
   margin-bottom: 4px;
 }
 
 .header h2 {
-  font-size: 11pt;
+  font-size: 12pt;
   font-weight: 400;
   color: var(--primary);
 }
 
 .section {
-  margin-bottom: 15px;
+  margin-bottom: 28px;
 }
 
 .section h3 {
-  font-size: 11pt;
+  font-size: 12pt;
   font-weight: 600;
   color: var(--primary-dark);
   margin-bottom: 10px;
@@ -208,14 +208,14 @@ body {
 
 .summary {
   color: var(--text-dark);
-  font-size: 9pt;
+  font-size: 9.5pt;
   line-height: 1.5;
 }
 
 /* Experience & Education entries */
 .entry {
-  margin-bottom: 18px;
-  padding-bottom: 18px;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
   border-bottom: 1px solid var(--border);
   page-break-inside: avoid;
 }
@@ -230,18 +230,18 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .entry-title h4 {
-  font-size: 10.5pt;
+  font-size: 11pt;
   font-weight: 600;
   color: var(--text-dark);
   margin-bottom: 2px;
 }
 
 .company {
-  font-size: 9pt;
+  font-size: 9.5pt;
   color: var(--text-muted);
 }
 
@@ -260,8 +260,8 @@ body {
 .highlights li {
   position: relative;
   padding-left: 14px;
-  margin-bottom: 4px;
-  font-size: 9pt;
+  margin-bottom: 6px;
+  font-size: 9.5pt;
   color: var(--text-dark);
   line-height: 1.5;
 }
@@ -286,7 +286,7 @@ body {
   }
 
   body {
-    font-size: 9pt;
+    font-size: 9.5pt;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
