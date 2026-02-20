@@ -30,6 +30,28 @@ Le CV source est stocké dans le navigateur et vous est transmis dans le prompt 
 
 **Note pour l'Agent** : Tous les outils `save_...` informent le frontend qui persiste les données dans le `localStorage` du navigateur. Utilisez le "SOURCE RESUME" et la configuration fournis dans le prompt comme base de travail.
 
+## Confidentialité et Gestion des Données Personnelles
+
+Pour protéger la vie privée du candidat et optimiser l'utilisation des tokens, **les informations personnelles sont automatiquement retirées du contexte LLM** :
+
+**Données retirées du contexte** :
+
+- `basics.name` (nom complet)
+- `basics.email` (adresse email)
+- `basics.phone` (numéro de téléphone)
+- `basics.url` (site web personnel)
+- `basics.image` (photo de profil en base64 - peut représenter 20 000 à 40 000 caractères)
+- `basics.location` (adresse complète, code postal, ville)
+- `basics.profiles` (profils de réseaux sociaux)
+
+**Données conservées dans le contexte** :
+
+- `basics.summary` (résumé professionnel - nécessaire pour adapter les CV)
+- `basics.label` (titre professionnel - nécessaire pour le matching)
+- Toutes les autres sections : `work`, `education`, `skills`, `languages`, `projects`, etc.
+
+**Restauration automatique** : Lorsque vous utilisez des outils comme `generate_resume_files`, les informations personnelles complètes sont **automatiquement restaurées** depuis le CV source. Vous n'avez pas à vous préoccuper des données manquantes - elles seront présentes dans les fichiers HTML et PDF générés.
+
 ## Instructions pour l'Agent
 
 **Dynamisme et Communication** : L'interface affiche vos pensées en temps réel. Lorsque vous décidez d'utiliser un outil, expliquez TOUJOURS brièvement ce que vous faites dans le champ `content` avant de lancer l'appel (ex: "Je vais lire le fichier...", "Je prépare le PDF...").

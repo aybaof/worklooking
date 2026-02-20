@@ -1,11 +1,40 @@
-import agentInstruction from "./agent.md"
+import agentInstruction from "./agent.md";
+import type { Resume } from "../../shared/resume-types";
 
-export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: string) => {
+export const GenerateSystemPrompt = (
+  configJson: string,
+  resumeSourceJson: string,
+) => {
+  // Sanitize resume to remove personal information from LLM context
+  let sanitizedResumeJson = resumeSourceJson;
+
+  try {
+    const resume: Resume = JSON.parse(resumeSourceJson);
+
+    // Create sanitized version: strip all basics except summary and label
+    const sanitizedResume: Resume = {
+      ...resume,
+      basics: {
+        summary: resume.basics?.summary,
+        label: resume.basics?.label,
+      },
+    };
+
+    sanitizedResumeJson = JSON.stringify(sanitizedResume, null, 2);
+  } catch (e) {
+    // If parsing fails, use original (fallback for safety)
+    console.warn("Failed to sanitize resume for LLM context:", e);
+  }
+
   return `
       You are an expert recruitment assistant. 
       Context from agent.md: ${agentInstruction}
       Current config: ${configJson}
-      SOURCE RESUME (resume.json): ${resumeSourceJson}
+      SOURCE RESUME (resume.json): ${sanitizedResumeJson}
+      
+      NOTE: Personal information (name, email, phone, photo, address, social profiles) has been stripped from this context for privacy and token efficiency.
+      Only the professional summary and job title are included above.
+      When you use tools like "generate_resume_files", the complete personal information will be automatically restored from the source.
       
       Rules:
       - Be concise and professional.
@@ -22,23 +51,15 @@ export const GenerateSystemPrompt = (configJson: string, resumeSourceJson: strin
       2. ANALYZE the content before proceeding.
       3. Generate the relevant resume JSON based on the description.
       4. Use "write_file" to save any intermediate markdown or JSON files.
-      5. Use "render_resume" to generate the HTML.
-      6. Use "generate_pdf" if requested.
+      5. Use "generate_resume_files" to create both HTML and PDF in one step.
 
       CRITICAL:
       - You MUST use the provided "SOURCE RESUME" as the ONLY basis for any tailored resume. 
       - NEVER invent, hallucinate, or add experiences, diplomas, or skills that are not present in the SOURCE RESUME.
       - You may only reorder, highlight, or translate existing information.
       - If a skill is missing from the SOURCE RESUME but requested in the offer, you cannot add it to the tailored CV.
+      - Personal information (name, email, phone, photo) will be automatically included when generating files - do not worry about it being missing from the context above.
 
-      Workflow for a job offer:
-      1. Identify the job description. If the user provides a **URL**, use "fetch_url" to get the content. If the user provides **text** directly, use that.
-      2. ANALYZE the content before proceeding.
-      3. Generate the relevant resume JSON based on the description.
-      4. Use "write_file" to save any intermediate markdown or JSON files.
-      5. Use "render_resume" to generate the HTML.
-      6. Use "generate_pdf" if requested.
-
-      CRITICAL: You MUST have the job description content (either from direct text or tool result) before calling "render_resume" or "write_file" for a tailored resume. Sequential logic is mandatory when a fetch is required.
+      CRITICAL: You MUST have the job description content (either from direct text or tool result) before calling "generate_resume_files" or "write_file" for a tailored resume. Sequential logic is mandatory when a fetch is required.
     `;
 };
