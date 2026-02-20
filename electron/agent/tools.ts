@@ -71,12 +71,12 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
           htmlPath: {
             type: "string",
             description:
-              "Chemin relatif où sauvegarder le HTML (ex: candidatures/2026-02-20_doctolib/resume.html)",
+              "Chemin relatif où sauvegarder le HTML (ex: candidatures/doctolib/resume.html)",
           },
           pdfPath: {
             type: "string",
             description:
-              "Chemin relatif où sauvegarder le PDF (ex: candidatures/2026-02-20_doctolib/resume.pdf)",
+              "Chemin relatif où sauvegarder le PDF (ex: candidatures/doctolib/resume.pdf)",
           },
         },
         required: ["resumeJson", "htmlPath", "pdfPath"],

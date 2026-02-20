@@ -62,7 +62,7 @@ Pour chaque nouvelle offre d'emploi, créer un dossier dédié dans `candidature
 
 ```
 candidatures/
-└── YYYY-MM-DD_entreprise_poste/
+└── entreprise_poste/
     ├── offre.md              # Copie/résumé de l'offre d'emploi
     ├── resume.json           # CV adapté à cette offre
     ├── resume.html           # HTML généré pour le CV
@@ -71,7 +71,7 @@ candidatures/
     └── notes.md              # Notes personnelles (entretiens, contacts, etc.)
 ```
 
-**Convention de nommage du dossier** : `YYYY-MM-DD_entreprise_poste` (ex: `2026-01-15_doctolib_fullstack-developer`).
+**Convention de nommage du dossier** : `entreprise_poste` (ex: `doctolib_fullstack-developer`). **IMPORTANT**: Ne PAS inclure de date dans le nom du dossier.
 
 #### Processus de création d'une candidature (Séquentiel)
 

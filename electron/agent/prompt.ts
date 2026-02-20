@@ -52,6 +52,8 @@ export const GenerateSystemPrompt = (
       3. Generate the relevant resume JSON based on the description.
       4. Use "write_file" to save any intermediate markdown or JSON files.
       5. Use "generate_resume_files" to create both HTML and PDF in one step.
+      
+      IMPORTANT: When creating candidature folders, use ONLY the format "company_position" (e.g., "doctolib_fullstack-developer"). Do NOT add dates or timestamps to folder names.
 
       CRITICAL:
       - You MUST use the provided "SOURCE RESUME" as the ONLY basis for any tailored resume. 
