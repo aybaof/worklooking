@@ -58,8 +58,9 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "render_resume",
-      description: "Génère le HTML d'un CV à partir du JSON et d'un thème.",
+      name: "generate_resume_files",
+      description:
+        "Crée les fichiers HTML et PDF du CV à partir du JSON Resume. Génère automatiquement les deux formats et les sauvegarde aux chemins spécifiés. Si la génération du PDF échoue, le HTML est quand même sauvegardé et l'erreur est reportée.",
       parameters: {
         type: "object",
         properties: {
@@ -67,8 +68,18 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
             type: "object",
             description: "Le contenu du CV au format JSON Resume.",
           },
+          htmlPath: {
+            type: "string",
+            description:
+              "Chemin relatif où sauvegarder le HTML (ex: candidatures/2026-02-20_doctolib/resume.html)",
+          },
+          pdfPath: {
+            type: "string",
+            description:
+              "Chemin relatif où sauvegarder le PDF (ex: candidatures/2026-02-20_doctolib/resume.pdf)",
+          },
         },
-        required: ["resumeJson"],
+        required: ["resumeJson", "htmlPath", "pdfPath"],
       },
     },
   },
@@ -92,27 +103,6 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
           },
         },
         required: ["url"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "generate_pdf",
-      description: "Génère un PDF à partir d'un fichier HTML.",
-      parameters: {
-        type: "object",
-        properties: {
-          htmlPath: {
-            type: "string",
-            description: "Chemin relatif vers le HTML source.",
-          },
-          pdfPath: {
-            type: "string",
-            description: "Chemin relatif vers le PDF de sortie.",
-          },
-        },
-        required: ["htmlPath", "pdfPath"],
       },
     },
   },

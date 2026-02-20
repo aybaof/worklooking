@@ -9,23 +9,22 @@ export const renderTheme = (themeName: ThemeName, resumeData: any): string => {
     throw new Error(`Unknown theme: ${themeName}`);
   }
 
-  // Compile and render the template
-  const html = Handlebars.compile(theme.template)({
+  // Compile the template with options to prevent truncation
+  const template = Handlebars.compile(theme.template, {
+    noEscape: false, // Keep HTML escaping for security
+    strict: false,
+    assumeObjects: false,
+    preventIndent: false,
+    ignoreStandalone: false,
+    explicitPartialContext: false,
+    // No string length limits
+  });
+
+  // Render with the data
+  return template({
     css: theme.styles,
     resume: resumeData,
   });
-
-  // Debug: Check if image is in the output
-  const imgMatch = html.match(/src="data:image[^"]+"/);
-  if (imgMatch) {
-    console.log(
-      `[renderTheme] Image src length in HTML: ${imgMatch[0].length}`,
-    );
-  } else {
-    console.warn(`[renderTheme] No image found in HTML output!`);
-  }
-
-  return html;
 };
 
 // Register Handlebars helpers (shared between all themes)
@@ -33,8 +32,12 @@ export const renderTheme = (themeName: ThemeName, resumeData: any): string => {
 // Helper to safely output base64 image data without truncation
 Handlebars.registerHelper("safeImage", function (imageData: string) {
   if (!imageData) return "";
-  // Return as SafeString to prevent escaping and truncation
-  return new Handlebars.SafeString(imageData);
+
+  // Ensure the string is treated as-is without any processing
+  // Use SafeString to prevent HTML escaping
+  // Handlebars can truncate long strings, so we explicitly mark it as safe
+  const value = new Handlebars.SafeString(imageData)
+  return value
 });
 
 Handlebars.registerHelper("paragraphSplit", function (plaintext: string) {

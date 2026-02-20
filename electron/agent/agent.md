@@ -57,10 +57,7 @@ candidatures/
 2. **Préparer le dossier** : Utiliser `write_file` pour créer les fichiers dans le sous-dossier de candidature.
 3. **Sauvegarder l'offre** dans `offre.md`.
 4. **Générer le `resume.json` adapté** (basé sur le `resume.json` source).
-5. **Générer le PDF** :
-   - **Étape 1** : `render_resume` pour obtenir le HTML.
-   - **Étape 2** : `write_file` pour sauvegarder le HTML dans `resume.html`.
-   - **Étape 3** : `generate_pdf` à partir du HTML pour créer `resume.pdf`.
+5. **Générer les fichiers du CV** : Utiliser `generate_resume_files` pour créer automatiquement `resume.html` ET `resume.pdf` en une seule étape. L'outil génère le HTML à partir du JSON Resume adapté et le convertit immédiatement en PDF.
 6. **Rédiger la lettre de motivation** si nécessaire.
 7. **Mettre à jour le suivi** via `save_candidature_config` dans la section `applications`.
 

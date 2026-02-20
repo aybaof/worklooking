@@ -162,25 +162,17 @@ async function fetchUrl(
     show: false, // Always hidden
     width: 1200,
     height: 800,
+    opacity: 0, // Ensure completely invisible
+    skipTaskbar: true, // Don't show in taskbar
     webPreferences: {
       partition: FETCH_SESSION_PARTITION, // Global persistent session for cookies
       contextIsolation: true,
       nodeIntegration: false,
+      offscreen: true, // Render offscreen for complete invisibility
     },
   });
 
-  let finalUrl = url;
-
   try {
-    // Track navigation for redirect detection
-    win.webContents.on("did-navigate", (_, navigationUrl) => {
-      finalUrl = navigationUrl;
-    });
-
-    win.webContents.on("did-navigate-in-page", (_, navigationUrl) => {
-      finalUrl = navigationUrl;
-    });
-
     // Load URL
     await win.loadURL(url);
 
@@ -209,8 +201,81 @@ async function fetchUrl(
       }
     }
 
-    // Get page title for auth detection
+    // Attempt to automatically handle cookie consent banners
+    try {
+      await win.webContents.executeJavaScript(`
+        (function() {
+          // Common cookie consent button patterns (text content, aria-labels, IDs)
+          const acceptPatterns = [
+            'accept', 'agree', 'allow', 'consent', 'ok', 'got it', 
+            'i accept', 'i agree', 'continue', 'understood', 'dismiss'
+          ];
+          
+          // Common reject/decline patterns to avoid
+          const rejectPatterns = ['reject', 'decline', 'deny', 'refuse', 'disagree'];
+          
+          function matchesPattern(text, patterns) {
+            const normalized = text.toLowerCase().trim();
+            return patterns.some(pattern => normalized.includes(pattern));
+          }
+          
+          function isLikelyAcceptButton(element) {
+            const text = element.textContent || element.value || element.ariaLabel || element.title || '';
+            const id = element.id || '';
+            const className = element.className || '';
+            const combined = (text + ' ' + id + ' ' + className).toLowerCase();
+            
+            // Must match accept pattern
+            if (!matchesPattern(combined, acceptPatterns)) return false;
+            
+            // Must NOT match reject pattern
+            if (matchesPattern(combined, rejectPatterns)) return false;
+            
+            return true;
+          }
+          
+          // Find all clickable elements
+          const buttons = Array.from(document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]'));
+          
+          // Score buttons by likelihood of being the "accept all" button
+          const candidates = buttons
+            .filter(btn => isLikelyAcceptButton(btn))
+            .map(btn => {
+              const text = (btn.textContent || '').toLowerCase();
+              let score = 0;
+              
+              // Prefer "accept all" over just "accept"
+              if (text.includes('accept all') || text.includes('agree all') || text.includes('allow all')) score += 10;
+              else if (text.includes('accept') || text.includes('agree') || text.includes('allow')) score += 5;
+              
+              // Prefer buttons in likely cookie banner containers
+              const parent = btn.closest('[class*="cookie"], [class*="consent"], [class*="gdpr"], [id*="cookie"], [id*="consent"], [id*="gdpr"]');
+              if (parent) score += 3;
+              
+              return { btn, score };
+            })
+            .sort((a, b) => b.score - a.score);
+          
+          // Click the best candidate if found
+          if (candidates.length > 0) {
+            candidates[0].btn.click();
+            return true;
+          }
+          
+          return false;
+        })();
+      `);
+
+      // Wait a moment for the consent to process
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    } catch (cookieError) {
+      // Cookie banner handling failed - not critical, continue
+      console.warn("Cookie consent auto-click failed:", cookieError);
+    }
+
+    // Get page title and final URL for auth detection
     const pageTitle = await win.webContents.getTitle();
+    const finalUrl = win.webContents.getURL();
 
     // Conservative auth detection
     const needsAuth = detectsAuthRequired(url, finalUrl, pageTitle);
@@ -455,16 +520,81 @@ async function executeTool(
     case "read_file":
       result = await readFile(args);
       break;
-    case "render_resume":
-      // Always use source basics to preserve image and personal data
-      // The LLM should not modify the basics section
+    case "generate_resume_files":
+      // Preserve basics from source resume
       if (sourceResume?.basics && args.resumeJson) {
-        args.resumeJson.basics = sourceResume.basics;
+        args.resumeJson.basics = { ...sourceResume.basics };
       }
-      result = await renderResume(args);
-      break;
-    case "generate_pdf":
-      result = await generatePdf(args);
+
+      try {
+        // Step 1: Generate HTML
+        const html = await renderResume({
+          resumeJson: args.resumeJson,
+          themeName: "modern-sidebar", // Default theme
+        });
+
+        // Step 2: Save HTML to file
+        const htmlWriteResult = await writeFile({
+          filePath: args.htmlPath,
+          content: html,
+        });
+
+        if (!htmlWriteResult.success) {
+          result = {
+            success: false,
+            error: "Failed to save HTML file",
+          };
+          break;
+        }
+
+        // Step 3: Generate PDF from HTML file
+        let pdfWriteResult:
+          | { success: boolean; path?: string; error?: string }
+          | undefined;
+        let pdfError: string | undefined;
+
+        try {
+          pdfWriteResult = await generatePdf({
+            htmlPath: args.htmlPath,
+            pdfPath: args.pdfPath,
+          });
+
+          if (!pdfWriteResult.success) {
+            pdfError = pdfWriteResult.error;
+          }
+        } catch (pdfErr: unknown) {
+          const pdfMessage =
+            pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
+          pdfError = pdfMessage;
+        }
+
+        // Partial success: HTML saved but PDF failed
+        if (pdfError) {
+          result = {
+            success: true,
+            warning: `HTML created but PDF generation failed: ${pdfError}`,
+            htmlPath: htmlWriteResult.path,
+            htmlSize: html.length,
+            pdfPath: null,
+            pdfError: pdfError,
+          };
+        } else {
+          // Full success: Both HTML and PDF created
+          result = {
+            success: true,
+            message: "Resume HTML and PDF generated successfully",
+            htmlPath: htmlWriteResult.path,
+            pdfPath: pdfWriteResult?.path || null,
+            htmlSize: html.length,
+          };
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        result = {
+          success: false,
+          error: `Resume generation failed: ${message}`,
+        };
+      }
       break;
     case "fetch_url":
       result = await fetchUrl(args.url, {
@@ -472,10 +602,10 @@ async function executeTool(
       });
       break;
     case "save_source_resume":
-      // Always use source basics to preserve image and personal data
-      // The LLM should not modify the basics section
-      if (sourceResume?.basics && args.resumeJson) {
-        args.resumeJson.basics = sourceResume.basics;
+      // Preserve only the image from source basics, allow other fields to be updated
+      if (sourceResume?.basics?.image && args.resumeJson?.basics) {
+        // Keep the original image (base64 data)
+        args.resumeJson.basics.image = sourceResume.basics.image;
       }
       updatedResume = args.resumeJson;
       result = {
