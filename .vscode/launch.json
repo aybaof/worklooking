@@ -2,61 +2,63 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch Main",
+      "name": "Electron Forge: Launch",
       "type": "node",
       "request": "launch",
       "cwd": "${workspaceFolder}",
-      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
-      "windows": {
-        "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd"
-      },
-      "args": [
-        "--inspect=5858",
-        "--remote-debugging-port=9222",
-        "-r",
-        "tsx",
-        "electron/main.ts"
-      ],
-      "env": {
-        "NODE_ENV": "development"
-      },
-      "preLaunchTask": "start-vite",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:debug", "--", "--", "--remote-debugging-port=9222"],
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
       "sourceMaps": true,
-      "console": "integratedTerminal"
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ]
     },
     {
-      "name": "Attach Main",
+      "name": "Attach to Main Process",
       "type": "node",
       "request": "attach",
-      "port": 5858,
+      "port": 9229,
       "cwd": "${workspaceFolder}",
       "sourceMaps": true,
-      "skipFiles": ["<node_internals>/**"]
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"],
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/**",
+        "!**/node_modules/**"
+      ]
     },
     {
-      "name": "Attach Renderer",
+      "name": "Attach to Renderer",
       "type": "chrome",
       "request": "attach",
       "port": 9222,
       "webRoot": "${workspaceFolder}/src",
-      "timeout": 30000,
+      "timeout": 60000,
       "urlFilter": "http://localhost:5173/*",
+      "sourceMaps": true,
       "sourceMapPathOverrides": {
         "webpack:///./src/*": "${webRoot}/*",
-        "vite/resources/*": "${workspaceFolder}/node_modules/vite/dist/client/*"
-      }
+        "vite:///*": "${workspaceFolder}/*",
+        "/__parcel_source_root/*": "${workspaceFolder}/*"
+      },
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**"
+      ]
     }
   ],
   "compounds": [
     {
-      "name": "Launch All (Vite + Electron)",
-      "configurations": ["Launch Main", "Attach Renderer"],
-      "stopAll": true
-    },
-    {
-      "name": "Attach All (Manual Start)",
-      "configurations": ["Attach Main", "Attach Renderer"],
-      "stopAll": true
+      "name": "Debug All (Main + Renderer)",
+      "configurations": ["Attach to Main Process", "Attach to Renderer"],
+      "stopAll": true,
+      "presentation": {
+        "order": 1
+      }
     }
   ]
 }

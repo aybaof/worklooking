@@ -2,6 +2,17 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "wait-for-dev-server",
+      "type": "shell",
+      "command": "echo",
+      "args": ["Waiting for Electron Forge dev server..."],
+      "presentation": {
+        "reveal": "silent",
+        "close": true
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "start-vite",
       "type": "npm",
       "script": "vite",
