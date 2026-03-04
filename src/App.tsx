@@ -11,6 +11,8 @@ import { useSettings } from "@/hooks/useSettings";
 import { useChat } from "@/hooks/useChat";
 import { GuidanceManager } from "@/components/onboarding/GuidanceManager";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useResume } from "./hooks/useResume";
+import { useCandidatureConfig } from "./hooks/useCandidatureConfig";
 
 const pageVariants = {
   initial: {
@@ -29,9 +31,16 @@ const pageVariants = {
 
 export default function App() {
   const settings = useSettings();
+  const resume = useResume();
+  const candidature = useCandidatureConfig();
+
   const chat = useChat({
     apiKey: settings.apiKey,
     selectedModel: settings.selectedModel,
+    resume: resume.resume,
+    candidature: candidature.config,
+    onResumeUpdate: resume.setResumeByAi,
+    onCandidatureUpdate: candidature.setCandidatureByAi,
   });
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -48,7 +57,7 @@ export default function App() {
             WorkLooking Agent
           </h1>
         </div>
-         <div className="flex gap-2">
+        <div className="flex gap-2">
           <NavLink to="/">
             {({ isActive }) => (
               <Button variant={isActive ? "default" : "ghost"}>
@@ -76,11 +85,15 @@ export default function App() {
             {({ isActive }) => {
               const shouldHighlight = !settings.apiKey.trim();
               return (
-                <Button variant={isActive || shouldHighlight ? "default" : "ghost"}>
+                <Button
+                  variant={isActive || shouldHighlight ? "default" : "ghost"}
+                >
                   <Settings className="w-4 h-4 mr-2" />
                   Paramètres
                   {!isActive && shouldHighlight && (
-                    <span className="ml-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full">!</span>
+                    <span className="ml-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full">
+                      !
+                    </span>
                   )}
                 </Button>
               );
@@ -89,7 +102,7 @@ export default function App() {
         </div>
       </header>
 
-       <main className="flex-1 relative overflow-auto">
+      <main className="flex-1 relative overflow-auto">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -143,7 +156,7 @@ export default function App() {
                 element={
                   <ErrorBoundary>
                     <GuidanceManager pageId="resume-editor">
-                      <ResumeEditorPage />
+                      <ResumeEditorPage {...resume} />
                     </GuidanceManager>
                   </ErrorBoundary>
                 }
@@ -153,7 +166,7 @@ export default function App() {
                 element={
                   <ErrorBoundary>
                     <GuidanceManager pageId="candidature-editor">
-                      <CandidatureEditorPage />
+                      <CandidatureEditorPage {...candidature} />
                     </GuidanceManager>
                   </ErrorBoundary>
                 }

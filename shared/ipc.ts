@@ -1,3 +1,6 @@
+import { CandidatureConfig } from "./candidature-types";
+import { Resume } from "./resume-types";
+
 // Channel definitions
 export const Channels = {
   // File operations
@@ -64,14 +67,14 @@ export interface IPCHandlers {
       messages: Array<{ role: string; content: string | null }>;
       apiKey: string;
       model: string;
-      resumeJson?: string;
-      configJson?: string;
+      resume: Resume;
+      candidature: CandidatureConfig;
     };
     response: {
       content?: string;
       error?: string;
-      updatedResume?: unknown;
-      updatedConfig?: unknown;
+      updatedResume?: Resume;
+      updatedConfig?: CandidatureConfig;
     };
   };
 }

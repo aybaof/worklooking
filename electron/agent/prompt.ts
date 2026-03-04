@@ -1,36 +1,24 @@
 import agentInstruction from "./agent.md";
 import type { Resume } from "../../shared/resume-types";
+import { CandidatureConfig } from "../../shared/candidature-types";
 
 export const GenerateSystemPrompt = (
-  configJson: string,
-  resumeSourceJson: string,
+  candidature: CandidatureConfig,
+  resume: Resume,
 ) => {
-  // Sanitize resume to remove personal information from LLM context
-  let sanitizedResumeJson = resumeSourceJson;
-
-  try {
-    const resume: Resume = JSON.parse(resumeSourceJson);
-
-    // Create sanitized version: strip all basics except summary and label
-    const sanitizedResume: Resume = {
-      ...resume,
-      basics: {
-        summary: resume.basics?.summary,
-        label: resume.basics?.label,
-      },
-    };
-
-    sanitizedResumeJson = JSON.stringify(sanitizedResume, null, 2);
-  } catch (e) {
-    // If parsing fails, use original (fallback for safety)
-    console.warn("Failed to sanitize resume for LLM context:", e);
-  }
+  const sanitizedResume: Resume = {
+    ...resume,
+    basics: {
+      summary: resume.basics?.summary,
+      label: resume.basics?.label,
+    },
+  };
 
   return `
       You are an expert recruitment assistant. 
       Context from agent.md: ${agentInstruction}
-      Current config: ${configJson}
-      SOURCE RESUME (resume.json): ${sanitizedResumeJson}
+      Current config: ${JSON.stringify(candidature, null, 2)}
+      SOURCE RESUME (resume.json): ${JSON.stringify(sanitizedResume, null, 2)}
       
       NOTE: Personal information (name, email, phone, photo, address, social profiles) has been stripped from this context for privacy and token efficiency.
       Only the professional summary and job title are included above.

@@ -55,25 +55,25 @@ const sectionVariants = {
   exit: { opacity: 0, y: -10 },
 };
 
-export default function ResumeEditorPage() {
-  const {
-    resume,
-    isLoading,
-    isSaving,
-    saveSuccess,
-    error,
-    isDirty,
-    loadResume,
-    saveResume,
-    updateBasics,
-    updateLocation,
-    updateProfile,
-    removeProfile,
-    addItem,
-    removeItem,
-    updateItem,
-  } = useResume();
+interface resumeEditorPageI extends ReturnType<typeof useResume> {}
 
+export default function ResumeEditorPage({
+  resume,
+  isLoading,
+  isSaving,
+  saveSuccess,
+  error,
+  isDirty,
+  loadResume,
+  saveResume,
+  updateBasics,
+  updateLocation,
+  updateProfile,
+  removeProfile,
+  addItem,
+  removeItem,
+  updateItem,
+}: resumeEditorPageI) {
   const [activeSection, setActiveSection] = useState<SectionType>("basics");
 
   return (
@@ -124,7 +124,7 @@ export default function ResumeEditorPage() {
         </div>
       </div>
 
-       <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Navigation */}
         <div className="w-64 border-r bg-muted/30 p-4 space-y-1 overflow-y-auto">
           <NavButton
@@ -195,7 +195,7 @@ export default function ResumeEditorPage() {
           />
         </div>
 
-         {/* Content Area */}
+        {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
           <div className="max-w-3xl mx-auto space-y-6">
             {error && (

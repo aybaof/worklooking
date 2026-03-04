@@ -30,27 +30,29 @@ const sectionVariants = {
   exit: { opacity: 0, y: -10 },
 };
 
-export default function CandidatureEditorPage() {
-  const {
-    config,
-    setConfig,
-    isLoading,
-    isSaving,
-    saveSuccess,
-    error,
-    isDirty,
-    loadConfig,
-    saveConfig,
-    updateCandidate,
-    updateCandidateSkill,
-    addCandidateSkill,
-    removeCandidateSkill,
-    updateGoals,
-    addItem,
-    removeItem,
-    updateItem,
-  } = useCandidatureConfig();
+interface candidatureEditorPageI extends ReturnType<
+  typeof useCandidatureConfig
+> {}
 
+export default function CandidatureEditorPage({
+  config,
+  setConfig,
+  isLoading,
+  isSaving,
+  saveSuccess,
+  error,
+  isDirty,
+  loadConfig,
+  saveConfig,
+  updateCandidate,
+  updateCandidateSkill,
+  addCandidateSkill,
+  removeCandidateSkill,
+  updateGoals,
+  addItem,
+  removeItem,
+  updateItem,
+}: candidatureEditorPageI) {
   const [activeSection, setActiveSection] = useState<SectionType>("candidate");
 
   return (
@@ -101,7 +103,7 @@ export default function CandidatureEditorPage() {
         </div>
       </div>
 
-       <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Navigation */}
         <div className="w-64 border-r bg-muted/30 p-4 space-y-1 overflow-y-auto">
           <NavButton
@@ -130,7 +132,7 @@ export default function CandidatureEditorPage() {
           />
         </div>
 
-         {/* Content Area */}
+        {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
           <div className="max-w-3xl mx-auto space-y-6">
             {error && (

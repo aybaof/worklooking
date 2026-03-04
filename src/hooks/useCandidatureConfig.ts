@@ -57,6 +57,11 @@ export function useCandidatureConfig() {
     loadConfig();
   }, [loadConfig]);
 
+  const setCandidatureByAi = useCallback((candidature: CandidatureConfig) => {
+    setConfig(candidature)
+    setIsDirty(true);
+  }, []);
+
   const saveConfig = useCallback(async () => {
     setError(null);
     setSaveSuccess(false);
@@ -160,7 +165,7 @@ export function useCandidatureConfig() {
 
   return {
     config,
-    setConfig,
+    setCandidatureByAi,
     isLoading,
     isSaving,
     saveSuccess,
