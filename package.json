@@ -1,29 +1,25 @@
 {
   "name": "worklooking",
   "version": "1.0.1",
-  "main": "dist-electron/main.js",
+  "main": ".vite/build/main.js",
   "scripts": {
-    "dev": "concurrently \"npm run vite\" \"npm run watch:main\" \"wait-on http://localhost:5173 dist-electron/main.js && nodemon\"",
-    "vite": "vite",
-    "watch:main": "vite build --config vite.main.config.ts --watch --mode development",
-    "build:main": "vite build --config vite.main.config.ts",
-    "build:renderer": "vite build",
-    "build": "npm run build:renderer && npm run build:main",
-    "build:forge": "npm run build && electron-forge package",
-    "preview": "vite preview",
+    "dev": "electron-forge start",
+    "dev:debug": "electron-forge start --inspect-electron --remote-debugging-port=9222",
     "start": "electron-forge start",
     "package": "electron-forge package",
-    "package:win": "electron-forge make --platform win32 --arch x64",
-    "package:all": "electron-forge make",
+    "make": "electron-forge make --platform win32 --arch x64",
+    "make:all": "electron-forge make",
     "publish": "electron-forge publish",
-    "make": "npm run build && npm run package:win",
-    "clean": "rm -r electron-dist && rm -r dist"
+    "clean": "rm -rf .vite out dist dist-electron"
   },
   "author": "Aymeric Barakat",
   "description": "WorkLooking Agent - AI-powered resume and job application assistant",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aybaof/worklooking"
+  },
   "homepage": "./",
   "dependencies": {
-    "@openai/agents": "^0.3.9",
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.1.18",
     "class-variance-authority": "^0.7.1",
@@ -67,6 +63,7 @@
     "@types/sharp": "^0.31.1",
     "@vitejs/plugin-react": "^5.1.2",
     "electron": "^40.0.0",
+    "flora-colossus": "^3.0.2",
     "nodemon": "^3.1.11",
     "prettier": "^3.8.1",
     "ts-node": "^10.9.2",

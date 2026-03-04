@@ -1,3 +1,7 @@
+// Globals injected by Forge's Vite plugin at build time
+declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
+declare const MAIN_WINDOW_VITE_NAME: string;
+
 import {
   app,
   BrowserWindow,
@@ -76,8 +80,8 @@ interface ChatArgs {
   messages: OpenAI.Chat.ChatCompletionMessageParam[];
   apiKey: string;
   model: string;
-  resumeJson?: string;
-  configJson?: string;
+  resume: Resume;
+  candidature: CandidatureConfig;
 }
 
 // --- Core Functionality ---
@@ -636,45 +640,15 @@ ipcMain.handle(
   Channels.AI_CHAT,
   async (
     _event: IpcMainInvokeEvent,
-    { messages, apiKey, model, resumeJson, configJson }: ChatArgs,
+    { messages, apiKey, model, resume, candidature }: ChatArgs,
   ) => {
-    const client = new OpenAI({
-      apiKey: apiKey,
-      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    });
-
     try {
-      const configSourceJson =
-        configJson || "No config found. Perform initialization.";
-      const resumeSourceJson = resumeJson || "No source resume JSON provided.";
+      const client = new OpenAI({
+        apiKey: apiKey,
+        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+      });
 
-      // Parse the source resume and config to pass to tools
-      let sourceResume: Resume | undefined;
-      let sourceConfig: CandidatureConfig | undefined;
-
-      if (resumeJson && resumeJson !== "No source resume JSON provided.") {
-        try {
-          sourceResume = JSON.parse(resumeJson);
-        } catch (e) {
-          console.warn("Failed to parse source resume JSON:", e);
-        }
-      }
-
-      if (
-        configJson &&
-        configJson !== "No config found. Perform initialization."
-      ) {
-        try {
-          sourceConfig = JSON.parse(configJson);
-        } catch (e) {
-          console.warn("Failed to parse source config JSON:", e);
-        }
-      }
-
-      const systemPrompt = GenerateSystemPrompt(
-        configSourceJson,
-        resumeSourceJson,
-      );
+      const systemPrompt = GenerateSystemPrompt(candidature, resume);
 
       let finalResume: Resume | null = null;
       let finalConfig: CandidatureConfig | null = null;
@@ -722,17 +696,17 @@ ipcMain.handle(
             name,
             args,
             _event,
-            sourceResume,
-            sourceConfig,
+            resume,
+            candidature,
           );
 
           if (updatedResume) {
             finalResume = updatedResume;
-            sourceResume = updatedResume; // Update for next tool calls
+            resume = updatedResume; // Update for next tool calls
           }
           if (updatedConfig) {
             finalConfig = updatedConfig;
-            sourceConfig = updatedConfig; // Update for next tool calls
+            candidature = updatedConfig; // Update for next tool calls
           }
 
           _event.sender.send(Channels.TOOL_STATUS, {
@@ -784,23 +758,14 @@ function createWindow() {
     },
   });
 
-  if (isDev) {
-    win.loadURL("http://localhost:5173");
-    return;
+  // Forge's Vite plugin defines these globals based on the renderer name "main_window"
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    win.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  } else {
+    win.loadFile(
+      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+    );
   }
-
-  // In production, __dirname is dist-electron
-  // index.html is in dist/index.html (sibling of dist-electron)
-  const indexPath = path.join(__dirname, "..", "dist", "index.html");
-  if (fs.existsSync(indexPath)) {
-    win.loadFile(indexPath);
-    return;
-  }
-
-  // Fallback or debug
-  console.error("Index file not found at:", indexPath);
-  // Try relative to app path
-  win.loadFile(path.join(APP_PATH, "dist", "index.html"));
 }
 
 app.whenReady().then(createWindow);
