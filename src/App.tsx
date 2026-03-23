@@ -13,6 +13,7 @@ import { GuidanceManager } from "@/components/onboarding/GuidanceManager";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useResume } from "./hooks/useResume";
 import { useCandidatureConfig } from "./hooks/useCandidatureConfig";
+import { useTemplateSelection } from "./hooks/useTemplateSelection";
 
 const pageVariants = {
   initial: {
@@ -33,12 +34,14 @@ export default function App() {
   const settings = useSettings();
   const resume = useResume();
   const candidature = useCandidatureConfig();
+  const templateSelection = useTemplateSelection();
 
   const chat = useChat({
     apiKey: settings.apiKey,
     selectedModel: settings.selectedModel,
     resume: resume.resume,
     candidature: candidature.config,
+    selectedTheme: templateSelection.selectedTheme,
     onResumeUpdate: resume.setResumeByAi,
     onCandidatureUpdate: candidature.setCandidatureByAi,
   });
@@ -156,7 +159,10 @@ export default function App() {
                 element={
                   <ErrorBoundary>
                     <GuidanceManager pageId="resume-editor">
-                      <ResumeEditorPage {...resume} />
+                      <ResumeEditorPage
+                        {...resume}
+                        templateSelection={templateSelection}
+                      />
                     </GuidanceManager>
                   </ErrorBoundary>
                 }

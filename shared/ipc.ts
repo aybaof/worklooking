@@ -21,6 +21,9 @@ export const Channels = {
   // AI operations
   AI_CHAT: "ai:chat",
 
+  // Resume operations
+  RESUME_RENDER_PREVIEW: "resume:render-preview",
+
   // Events (main -> renderer)
   CHAT_UPDATE: "chat:update",
   TOOL_STATUS: "tool:status",
@@ -69,12 +72,23 @@ export interface IPCHandlers {
       model: string;
       resume: Resume;
       candidature: CandidatureConfig;
+      selectedTheme?: string;
     };
     response: {
       content?: string;
       error?: string;
       updatedResume?: Resume;
       updatedConfig?: CandidatureConfig;
+    };
+  };
+  "resume:render-preview": {
+    request: {
+      resumeJson: Resume;
+      themeName: string;
+    };
+    response: {
+      html?: string;
+      error?: string;
     };
   };
 }

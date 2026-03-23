@@ -16,6 +16,7 @@ import { PDFParse } from "pdf-parse";
 import { tools } from "./agent/tools";
 import { GenerateSystemPrompt } from "./agent/prompt";
 import { renderTheme } from "./themes/shared/render";
+import { themes, ThemeName } from "./themes/index";
 import { Channels, ErrorCodes } from "../shared/ipc";
 import { Resume } from "../shared/resume-types";
 import { CandidatureConfig } from "../shared/candidature-types";
@@ -82,6 +83,7 @@ interface ChatArgs {
   model: string;
   resume: Resume;
   candidature: CandidatureConfig;
+  selectedTheme?: string;
 }
 
 // --- Core Functionality ---
@@ -99,10 +101,16 @@ async function writeFile({
   return { success: true, path: fullPath };
 }
 
-async function renderResume({ resumeJson }: ResumeArgs): Promise<string> {
+async function renderResume({
+  resumeJson,
+  themeName,
+}: ResumeArgs): Promise<string> {
   try {
-    const targetTheme = "modern-sidebar"; // Default to modern-sidebar
-    return renderTheme(targetTheme, resumeJson);
+    const validTheme: ThemeName =
+      themeName && themeName in themes
+        ? (themeName as ThemeName)
+        : "modern-sidebar";
+    return renderTheme(validTheme, resumeJson);
   } catch (error: unknown) {
     console.error(`Failed to render theme:`, error);
     const message = error instanceof Error ? error.message : String(error);
@@ -490,6 +498,26 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle(
+  Channels.RESUME_RENDER_PREVIEW,
+  async (
+    _event,
+    { resumeJson, themeName }: { resumeJson: Resume; themeName: string },
+  ) => {
+    try {
+      const validTheme: ThemeName =
+        themeName && themeName in themes
+          ? (themeName as ThemeName)
+          : "modern-sidebar";
+      const html = renderTheme(validTheme, resumeJson);
+      return { html };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { error: message };
+    }
+  },
+);
+
 async function readFile({ filePath }: { filePath: string }) {
   try {
     const safePath = validateAndSanitizePath(filePath, USER_DATA_PATH);
@@ -508,6 +536,7 @@ async function executeTool(
   event: IpcMainInvokeEvent,
   sourceResume?: Resume,
   sourceConfig?: CandidatureConfig,
+  selectedTheme?: string,
 ): Promise<{
   result: unknown;
   updatedResume?: Resume;
@@ -534,7 +563,7 @@ async function executeTool(
         // Step 1: Generate HTML
         const html = await renderResume({
           resumeJson: args.resumeJson,
-          themeName: "modern-sidebar", // Default theme
+          themeName: selectedTheme || "modern-sidebar",
         });
 
         // Step 2: Save HTML to file
@@ -640,7 +669,7 @@ ipcMain.handle(
   Channels.AI_CHAT,
   async (
     _event: IpcMainInvokeEvent,
-    { messages, apiKey, model, resume, candidature }: ChatArgs,
+    { messages, apiKey, model, resume, candidature, selectedTheme }: ChatArgs,
   ) => {
     try {
       const client = new OpenAI({
@@ -698,6 +727,7 @@ ipcMain.handle(
             _event,
             resume,
             candidature,
+            selectedTheme,
           );
 
           if (updatedResume) {
