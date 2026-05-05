@@ -20,6 +20,7 @@ export const Channels = {
 
   // AI operations
   AI_CHAT: "ai:chat",
+  AI_TEST_CONNECTION: "ai:test-connection",
 
   // Resume operations
   RESUME_RENDER_PREVIEW: "resume:render-preview",
@@ -70,6 +71,7 @@ export interface IPCHandlers {
       messages: Array<{ role: string; content: string | null }>;
       apiKey: string;
       model: string;
+      baseURL: string;
       resume: Resume;
       candidature: CandidatureConfig;
       selectedTheme?: string;
@@ -79,6 +81,17 @@ export interface IPCHandlers {
       error?: string;
       updatedResume?: Resume;
       updatedConfig?: CandidatureConfig;
+    };
+  };
+  "ai:test-connection": {
+    request: {
+      baseURL: string;
+      apiKey: string;
+      model: string;
+    };
+    response: {
+      success: boolean;
+      error?: string;
     };
   };
   "resume:render-preview": {
