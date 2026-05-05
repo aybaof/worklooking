@@ -39,6 +39,7 @@ export default function App() {
   const chat = useChat({
     apiKey: settings.apiKey,
     selectedModel: settings.selectedModel,
+    baseURL: settings.baseURL,
     resume: resume.resume,
     candidature: candidature.config,
     selectedTheme: templateSelection.selectedTheme,
@@ -86,7 +87,12 @@ export default function App() {
           </NavLink>
           <NavLink to="/settings">
             {({ isActive }) => {
-              const shouldHighlight = !settings.apiKey.trim();
+              const needsApiKey =
+                settings.currentPreset?.requiresApiKey ?? true;
+              const missingApiKey = needsApiKey && !settings.apiKey.trim();
+              const missingConfig =
+                !settings.baseURL.trim() || !settings.selectedModel.trim();
+              const shouldHighlight = missingApiKey || missingConfig;
               return (
                 <Button
                   variant={isActive || shouldHighlight ? "default" : "ghost"}
@@ -145,8 +151,14 @@ export default function App() {
                       <ConfigurationPage
                         apiKey={settings.apiKey}
                         setApiKey={settings.setApiKey}
-                        setSelectedModel={settings.setSelectedModel}
                         selectedModel={settings.selectedModel}
+                        setSelectedModel={settings.setSelectedModel}
+                        selectedProvider={settings.selectedProvider}
+                        onProviderChange={settings.handleProviderChange}
+                        baseURL={settings.baseURL}
+                        setBaseURL={settings.setBaseURL}
+                        currentPreset={settings.currentPreset}
+                        providerPresets={settings.providerPresets}
                         userDataPath={settings.userDataPath}
                         onSelectFolder={settings.handleSelectFolder}
                       />

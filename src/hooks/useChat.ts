@@ -11,6 +11,7 @@ import { CandidatureConfig } from "@/../shared/candidature-types";
 interface UseChatOptions {
   apiKey: string;
   selectedModel: string;
+  baseURL: string;
   resume: Resume;
   candidature: CandidatureConfig;
   selectedTheme?: string;
@@ -21,6 +22,7 @@ interface UseChatOptions {
 export function useChat({
   apiKey,
   selectedModel,
+  baseURL,
   resume,
   candidature,
   selectedTheme,
@@ -96,6 +98,7 @@ export function useChat({
           messages: updatedMessages,
           apiKey,
           model: selectedModel,
+          baseURL,
           resume,
           candidature,
           selectedTheme,
@@ -144,6 +147,7 @@ export function useChat({
     [
       input,
       apiKey,
+      baseURL,
       messages,
       selectedModel,
       resume,

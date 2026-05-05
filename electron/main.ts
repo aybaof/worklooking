@@ -81,6 +81,7 @@ interface ChatArgs {
   messages: OpenAI.Chat.ChatCompletionMessageParam[];
   apiKey: string;
   model: string;
+  baseURL: string;
   resume: Resume;
   candidature: CandidatureConfig;
   selectedTheme?: string;
@@ -669,12 +670,20 @@ ipcMain.handle(
   Channels.AI_CHAT,
   async (
     _event: IpcMainInvokeEvent,
-    { messages, apiKey, model, resume, candidature, selectedTheme }: ChatArgs,
+    {
+      messages,
+      apiKey,
+      model,
+      baseURL,
+      resume,
+      candidature,
+      selectedTheme,
+    }: ChatArgs,
   ) => {
     try {
       const client = new OpenAI({
-        apiKey: apiKey,
-        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+        apiKey: apiKey || "ollama",
+        baseURL: baseURL,
       });
 
       const systemPrompt = GenerateSystemPrompt(candidature, resume);
@@ -772,6 +781,40 @@ ipcMain.handle(
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       return { error: message };
+    }
+  },
+);
+
+ipcMain.handle(
+  Channels.AI_TEST_CONNECTION,
+  async (
+    _event: IpcMainInvokeEvent,
+    {
+      baseURL,
+      apiKey,
+      model,
+    }: {
+      baseURL: string;
+      apiKey: string;
+      model: string;
+    },
+  ) => {
+    try {
+      const client = new OpenAI({
+        apiKey: apiKey || "ollama",
+        baseURL: baseURL,
+      });
+
+      await client.chat.completions.create({
+        model: model,
+        messages: [{ role: "user", content: "Say hi" }],
+        max_tokens: 5,
+      });
+
+      return { success: true };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, error: message };
     }
   },
 );
