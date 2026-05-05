@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="fr">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>{{#resume.basics}}{{name}}{{/resume.basics}}</title>
+	<style>
+		{{{css}}}
+	</style>
+</head>
+<body>
+	<div class="resume">
+		{{#resume.basics}}
+		<header class="header">
+			<h1>{{name}}</h1>
+			{{#if label}}<h2>{{label}}</h2>{{/if}}
+			<div class="contact-elegant">
+				{{#if email}}<span>{{email}}</span>{{/if}}
+				{{#if phone}}<span>{{phone}}</span>{{/if}}
+				{{#location}}{{#if city}}<span>{{city}}{{#if region}}, {{region}}{{/if}}</span>{{/if}}{{/location}}
+			</div>
+		</header>
+		{{/resume.basics}}
+
+		{{#resume.basics}}
+		{{#if summary}}
+		<section class="section">
+			<h3 class="section-title">Profil</h3>
+			<p class="summary">{{summary}}</p>
+		</section>
+		{{/if}}
+		{{/resume.basics}}
+
+		{{#if resume.work.length}}
+		<section class="section">
+			<h3 class="section-title">Experience Professionnelle</h3>
+			{{#each resume.work}}
+			<div class="entry">
+				<div class="entry-header-elegant">
+					<div class="entry-title-line">
+						<span class="entry-title">{{position}}</span>
+						<span class="entry-date">{{MY startDate}} — {{#if endDate}}{{MY endDate}}{{else}}Present{{/if}}</span>
+					</div>
+					{{#if name}}<div class="entry-subtitle">{{name}}{{#if location}}, {{location}}{{/if}}</div>{{/if}}
+				</div>
+				{{#if summary}}<div class="entry-summary">{{summary}}</div>{{/if}}
+				{{#if highlights.length}}
+				<ul class="highlights">
+					{{#each highlights}}
+					<li>{{.}}</li>
+					{{/each}}
+				</ul>
+				{{/if}}
+			</div>
+			{{/each}}
+		</section>
+		{{/if}}
+
+		{{#if resume.education.length}}
+		<section class="section">
+			<h3 class="section-title">Formation</h3>
+			{{#each resume.education}}
+			<div class="entry">
+				<div class="entry-header-elegant">
+					<div class="entry-title-line">
+						<span class="entry-title">{{studyType}}{{#if area}}, {{area}}{{/if}}</span>
+						<span class="entry-date">{{Y startDate}}{{#if endDate}} — {{Y endDate}}{{/if}}</span>
+					</div>
+					{{#if institution}}<div class="entry-subtitle">{{institution}}</div>{{/if}}
+				</div>
+				{{#if score}}<div class="entry-summary">{{score}}</div>{{/if}}
+			</div>
+			{{/each}}
+		</section>
+		{{/if}}
+
+		{{#if resume.skills.length}}
+		<section class="section">
+			<h3 class="section-title">Competences</h3>
+			<div class="skills-elegant">
+				{{#each resume.skills}}
+				<div class="skill-item">
+					<strong>{{name}}</strong> : {{#each keywords}}{{.}}{{#unless @last}}, {{/unless}}{{/each}}
+				</div>
+				{{/each}}
+			</div>
+		</section>
+		{{/if}}
+
+		{{#if resume.projects.length}}
+		<section class="section">
+			<h3 class="section-title">Projets</h3>
+			{{#each resume.projects}}
+			<div class="entry">
+				<div class="entry-header-elegant">
+					<div class="entry-title-line">
+						<span class="entry-title">{{name}}</span>
+						{{#if startDate}}<span class="entry-date">{{MY startDate}}{{#if endDate}} — {{MY endDate}}{{/if}}</span>{{/if}}
+					</div>
+				</div>
+				{{#if description}}<div class="entry-summary">{{description}}</div>{{/if}}
+			</div>
+			{{/each}}
+		</section>
+		{{/if}}
+
+		{{#if resume.languages.length}}
+		<section class="section">
+			<h3 class="section-title">Langues</h3>
+			<div class="centered-section">
+				{{#each resume.languages}}
+				{{language}}{{#if fluency}} ({{fluency}}){{/if}}{{#unless @last}} • {{/unless}}
+				{{/each}}
+			</div>
+		</section>
+		{{/if}}
+
+		{{#if resume.interests.length}}
+		<section class="section">
+			<h3 class="section-title">Centres d'Interet</h3>
+			<div class="centered-section">
+				{{#each resume.interests}}
+				{{name}}{{#unless @last}} • {{/unless}}
+				{{/each}}
+			</div>
+		</section>
+		{{/if}}
+	</div>
+</body>
+</html>

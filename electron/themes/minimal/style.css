@@ -1,0 +1,195 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  font-size: 11pt;
+  line-height: 1.8;
+  color: #000;
+  background: #fff;
+}
+
+a {
+  color: #000;
+  text-decoration: none;
+}
+
+.resume {
+  max-width: 180mm;
+  margin: 0 auto;
+  padding: 35mm 25mm;
+}
+
+/* Header */
+.header {
+  margin-bottom: 40px;
+}
+
+.header h1 {
+  font-size: 18pt;
+  font-weight: 300;
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+
+.header h2 {
+  font-size: 11pt;
+  font-weight: 300;
+  color: #666;
+  margin-bottom: 15px;
+}
+
+.contact-minimal {
+  font-size: 10pt;
+  color: #666;
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+/* Section */
+.section {
+  margin-bottom: 35px;
+}
+
+.section-title {
+  font-size: 10pt;
+  font-weight: 400;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+  color: #000;
+}
+
+.summary {
+  font-size: 11pt;
+  line-height: 1.8;
+  font-weight: 300;
+  max-width: 85%;
+}
+
+/* Entry */
+.entry {
+  margin-bottom: 25px;
+  page-break-inside: avoid;
+}
+
+.entry:last-child {
+  margin-bottom: 0;
+}
+
+.entry-minimal-header {
+  margin-bottom: 8px;
+}
+
+.entry-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.entry-title {
+  font-weight: 400;
+  font-size: 11pt;
+}
+
+.entry-date {
+  font-size: 10pt;
+  color: #999;
+  font-weight: 300;
+}
+
+.entry-subtitle {
+  font-size: 10pt;
+  color: #666;
+  font-weight: 300;
+}
+
+.entry-summary {
+  font-size: 10.5pt;
+  margin-top: 6px;
+  line-height: 1.8;
+  font-weight: 300;
+  color: #333;
+}
+
+.highlights {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 8px;
+}
+
+.highlights li {
+  position: relative;
+  padding-left: 16px;
+  margin-bottom: 6px;
+  font-size: 10.5pt;
+  line-height: 1.8;
+  font-weight: 300;
+  color: #333;
+}
+
+.highlights li::before {
+  content: "–";
+  position: absolute;
+  left: 0;
+  color: #ccc;
+}
+
+/* Skills */
+.skills-minimal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skill-line-minimal {
+  font-size: 10.5pt;
+  font-weight: 300;
+}
+
+.skill-line-minimal strong {
+  font-weight: 400;
+  display: inline-block;
+  min-width: 120px;
+}
+
+/* Simple lists */
+.simple-list {
+  font-size: 10.5pt;
+  font-weight: 300;
+  line-height: 1.8;
+  color: #333;
+}
+
+/* Print styles */
+@media print {
+  html,
+  body {
+    height: 297mm;
+    width: 210mm;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .resume {
+    padding: 30mm 25mm;
+  }
+}

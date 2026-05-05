@@ -19,16 +19,52 @@ export const availableThemes: ThemeInfo[] = [
       "Mise en page a deux colonnes avec barre laterale sombre. Photo, competences et langues dans la barre laterale.",
   },
   {
-    id: "spartan-fr",
-    label: "Spartan FR",
+    id: "professional",
+    label: "Professional",
     description:
-      "Mise en page traditionnelle a une colonne. Complet avec toutes les sections et barres de niveau.",
+      "Design epure et ATS-friendly. Police Calibri, mise en page classique a une colonne. Parfait pour les grandes entreprises.",
   },
   {
     id: "simple",
     label: "Simple",
     description:
-      "Epure, noir et blanc, sans couleurs. Toutes les sections, typographie classique. Ideal pour l'impression.",
+      "Epure, noir et blanc, sans couleurs. Toutes les sections, typographie classique Georgia. Ideal pour l'impression.",
+  },
+  {
+    id: "compact",
+    label: "Compact",
+    description:
+      "Maximise la densite du contenu. Police Arial 9pt, marges reduites. Pour faire tenir beaucoup d'informations sur une page.",
+  },
+  {
+    id: "elegant",
+    label: "Elegant",
+    description:
+      "Sophistique avec police Garamond serif. Centrage elegant, small caps. Pour un CV distingue et raffine.",
+  },
+  {
+    id: "creative",
+    label: "Creative",
+    description:
+      "Moderne avec gradient violet et accents de couleur. Design audacieux pour secteurs creatifs et startups.",
+  },
+  {
+    id: "minimal",
+    label: "Minimal",
+    description:
+      "Ultra-epure avec beaucoup d'espace blanc. Helvetica Neue light 300. Design zen et respire.",
+  },
+  {
+    id: "bold",
+    label: "Bold",
+    description:
+      "Typographie impactante avec Impact et Arial Black. Sections en noir inverse. Fait impression immediatement.",
+  },
+  {
+    id: "spartan-fr",
+    label: "Spartan FR",
+    description:
+      "Template complet traditionnel. Toutes les sections avec barres de niveau de competences. Font Awesome 4.7.",
   },
 ];
 
