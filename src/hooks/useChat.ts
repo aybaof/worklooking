@@ -13,6 +13,7 @@ interface UseChatOptions {
   selectedModel: string;
   resume: Resume;
   candidature: CandidatureConfig;
+  selectedTheme?: string;
   onResumeUpdate: (resume: Resume) => void;
   onCandidatureUpdate: (config: CandidatureConfig) => void;
 }
@@ -22,6 +23,7 @@ export function useChat({
   selectedModel,
   resume,
   candidature,
+  selectedTheme,
   onResumeUpdate,
   onCandidatureUpdate,
 }: UseChatOptions) {
@@ -96,6 +98,7 @@ export function useChat({
           model: selectedModel,
           resume,
           candidature,
+          selectedTheme,
         });
 
         if (response.error) {
@@ -145,6 +148,7 @@ export function useChat({
       selectedModel,
       resume,
       candidature,
+      selectedTheme,
       onResumeUpdate,
       onCandidatureUpdate,
     ],

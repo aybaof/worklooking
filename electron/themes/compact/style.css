@@ -1,0 +1,177 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Arial", "Helvetica", sans-serif;
+  font-size: 9pt;
+  line-height: 1.3;
+  color: #000;
+  background: #fff;
+}
+
+a {
+  color: #000;
+  text-decoration: none;
+}
+
+.resume {
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 15mm 15mm;
+}
+
+/* Header */
+.header {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #000;
+}
+
+.header h1 {
+  font-size: 16pt;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.header h2 {
+  font-size: 10pt;
+  font-weight: 400;
+  margin-bottom: 4px;
+}
+
+.contact-compact {
+  font-size: 8.5pt;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+
+/* Section */
+.section {
+  margin-bottom: 10px;
+}
+
+.section-title {
+  font-size: 10pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #000;
+}
+
+.summary {
+  font-size: 9pt;
+  line-height: 1.3;
+}
+
+/* Entry */
+.entry {
+  margin-bottom: 8px;
+  page-break-inside: avoid;
+}
+
+.entry:last-child {
+  margin-bottom: 0;
+}
+
+.entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 1px;
+}
+
+.entry-title {
+  font-weight: 700;
+  font-size: 9.5pt;
+}
+
+.entry-subtitle {
+  font-size: 9pt;
+}
+
+.entry-date {
+  font-size: 8.5pt;
+  white-space: nowrap;
+}
+
+.highlights {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 2px;
+}
+
+.highlights li {
+  position: relative;
+  padding-left: 10px;
+  margin-bottom: 1px;
+  font-size: 8.5pt;
+  line-height: 1.3;
+}
+
+.highlights li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  font-size: 7pt;
+}
+
+/* Skills */
+.skills-compact {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  font-size: 8.5pt;
+}
+
+.skill-line {
+  display: flex;
+  gap: 4px;
+}
+
+.skill-line strong {
+  font-weight: 700;
+  min-width: 80px;
+}
+
+/* Three column for small items */
+.three-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  font-size: 8.5pt;
+}
+
+/* Print styles */
+@media print {
+  html,
+  body {
+    height: 297mm;
+    width: 210mm;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  body {
+    font-size: 8.5pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .resume {
+    padding: 12mm;
+  }
+}

@@ -36,7 +36,6 @@ interface candidatureEditorPageI extends ReturnType<
 
 export default function CandidatureEditorPage({
   config,
-  setConfig,
   isLoading,
   isSaving,
   saveSuccess,

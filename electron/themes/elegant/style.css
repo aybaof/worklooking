@@ -1,0 +1,207 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Garamond", "Georgia", "Times New Roman", serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #2c2c2c;
+  background: #fff;
+}
+
+a {
+  color: #2c2c2c;
+  text-decoration: none;
+  border-bottom: 1px solid #ccc;
+}
+
+.resume {
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 30mm 25mm;
+}
+
+/* Header */
+.header {
+  text-align: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #2c2c2c;
+}
+
+.header h1 {
+  font-size: 28pt;
+  font-weight: 400;
+  letter-spacing: 3px;
+  margin-bottom: 8px;
+  font-variant: small-caps;
+}
+
+.header h2 {
+  font-size: 13pt;
+  font-weight: 400;
+  font-style: italic;
+  margin-bottom: 12px;
+  color: #666;
+}
+
+.contact-elegant {
+  font-size: 10pt;
+  color: #666;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.contact-elegant span::after {
+  content: " | ";
+  margin: 0 8px;
+}
+
+.contact-elegant span:last-child::after {
+  content: "";
+}
+
+/* Section */
+.section {
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 14pt;
+  font-weight: 400;
+  font-variant: small-caps;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2c2c2c;
+  text-align: center;
+}
+
+.summary {
+  font-size: 11pt;
+  line-height: 1.7;
+  text-align: justify;
+  text-indent: 2em;
+  font-style: italic;
+}
+
+/* Entry */
+.entry {
+  margin-bottom: 18px;
+  page-break-inside: avoid;
+}
+
+.entry:last-child {
+  margin-bottom: 0;
+}
+
+.entry-header-elegant {
+  margin-bottom: 6px;
+}
+
+.entry-title-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+
+.entry-title {
+  font-weight: 600;
+  font-size: 12pt;
+}
+
+.entry-subtitle {
+  font-size: 11pt;
+  font-style: italic;
+  color: #666;
+}
+
+.entry-date {
+  font-size: 10pt;
+  color: #666;
+  font-style: italic;
+}
+
+.entry-summary {
+  font-size: 10.5pt;
+  margin-top: 4px;
+  line-height: 1.6;
+}
+
+.highlights {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 6px;
+}
+
+.highlights li {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: 4px;
+  font-size: 10.5pt;
+  line-height: 1.6;
+}
+
+.highlights li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+}
+
+/* Skills */
+.skills-elegant {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skill-item {
+  font-size: 10.5pt;
+}
+
+.skill-item strong {
+  font-weight: 600;
+  font-variant: small-caps;
+  letter-spacing: 1px;
+}
+
+/* Centered small sections */
+.centered-section {
+  text-align: center;
+  font-size: 10.5pt;
+}
+
+/* Print styles */
+@media print {
+  html,
+  body {
+    height: 297mm;
+    width: 210mm;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .resume {
+    padding: 25mm 22mm;
+  }
+}

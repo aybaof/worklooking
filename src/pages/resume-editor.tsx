@@ -16,6 +16,7 @@ import {
   Heart,
   Quote,
   HandHelping,
+  LayoutTemplate,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -33,10 +34,13 @@ import { PublicationsSection } from "@/components/resume-editor/PublicationsSect
 import { LanguagesSection } from "@/components/resume-editor/LanguagesSection";
 import { InterestsSection } from "@/components/resume-editor/InterestsSection";
 import { ReferencesSection } from "@/components/resume-editor/ReferencesSection";
+import { TemplateSelector } from "@/components/resume-editor/TemplateSelector";
 import { useResume } from "@/hooks/useResume";
+import { useTemplateSelection } from "@/hooks/useTemplateSelection";
 import { SaveStatus } from "@/components/ui/SaveStatus";
 
 type SectionType =
+  | "template"
   | "basics"
   | "work"
   | "volunteer"
@@ -55,7 +59,9 @@ const sectionVariants = {
   exit: { opacity: 0, y: -10 },
 };
 
-interface resumeEditorPageI extends ReturnType<typeof useResume> {}
+interface resumeEditorPageI extends ReturnType<typeof useResume> {
+  templateSelection: ReturnType<typeof useTemplateSelection>;
+}
 
 export default function ResumeEditorPage({
   resume,
@@ -73,6 +79,7 @@ export default function ResumeEditorPage({
   addItem,
   removeItem,
   updateItem,
+  templateSelection,
 }: resumeEditorPageI) {
   const [activeSection, setActiveSection] = useState<SectionType>("basics");
 
@@ -127,6 +134,13 @@ export default function ResumeEditorPage({
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar Navigation */}
         <div className="w-64 border-r bg-muted/30 p-4 space-y-1 overflow-y-auto">
+          <NavButton
+            active={activeSection === "template"}
+            onClick={() => setActiveSection("template")}
+            icon={<LayoutTemplate className="w-4 h-4" />}
+            label="Modele"
+          />
+          <div className="my-2 border-b border-border" />
           <NavButton
             active={activeSection === "basics"}
             onClick={() => setActiveSection("basics")}
@@ -214,6 +228,16 @@ export default function ResumeEditorPage({
                 exit="exit"
                 transition={{ duration: 0.3 }}
               >
+                {activeSection === "template" && (
+                  <TemplateSelector
+                    resume={resume}
+                    selectedTheme={templateSelection.selectedTheme}
+                    availableThemes={templateSelection.availableThemes}
+                    onSelectTheme={templateSelection.setSelectedTheme}
+                    renderPreview={templateSelection.renderPreview}
+                  />
+                )}
+
                 {activeSection === "basics" && (
                   <BasicsSection
                     basics={resume.basics}
