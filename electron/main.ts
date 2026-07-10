@@ -11,9 +11,9 @@ import {
 } from "electron";
 import path from "path";
 import fs from "fs";
-import OpenAI from "openai";
 import { PDFParse } from "pdf-parse";
-import { tools } from "./agent/tools";
+import { AiClientRouter } from "./agent/aiClient";
+import { ProviderApi } from "../shared/provider-types";
 import { GenerateSystemPrompt } from "./agent/prompt";
 import { renderTheme } from "./themes/shared/render";
 import { themes, ThemeName } from "./themes/index";
@@ -78,10 +78,11 @@ interface PdfArgs {
 }
 
 interface ChatArgs {
-  messages: OpenAI.Chat.ChatCompletionMessageParam[];
+  messages: Array<{ role: string; content: string | null }>;
   apiKey: string;
   model: string;
   baseURL: string;
+  api?: ProviderApi;
   resume: Resume;
   candidature: CandidatureConfig;
   selectedTheme?: string;
@@ -668,113 +669,71 @@ async function executeTool(
 
 ipcMain.handle(
   Channels.AI_CHAT,
-  async (
-    _event: IpcMainInvokeEvent,
-    {
-      messages,
-      apiKey,
-      model,
-      baseURL,
-      resume,
-      candidature,
-      selectedTheme,
-    }: ChatArgs,
-  ) => {
+  async (_event: IpcMainInvokeEvent, args: ChatArgs) => {
     try {
-      const client = new OpenAI({
-        apiKey: apiKey || "ollama",
-        baseURL: baseURL,
-      });
+      const systemPrompt = GenerateSystemPrompt(args.candidature, args.resume);
 
-      const systemPrompt = GenerateSystemPrompt(candidature, resume);
-
+      // The router runs the provider agent loop and calls back into this
+      // closure for each tool. State (resume/config) is tracked here so the
+      // router stays protocol-only.
+      let resume = args.resume;
+      let candidature = args.candidature;
       let finalResume: Resume | null = null;
       let finalConfig: CandidatureConfig | null = null;
 
-      let currentMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        { role: "system", content: systemPrompt },
-        ...messages,
-      ];
-
-      let response = await client.chat.completions.create({
-        model: model,
-        messages: currentMessages,
-        tools: tools,
-      });
-
-      if (!response.choices || response.choices.length === 0) {
-        throw new Error("No response from AI agent");
-      }
-
-      let assistantMessage = response.choices[0].message;
-
-      while (
-        assistantMessage.tool_calls &&
-        assistantMessage.tool_calls.length > 0
-      ) {
-        if (assistantMessage.content) {
-          _event.sender.send(Channels.CHAT_UPDATE, {
-            content: assistantMessage.content,
-          });
-        }
-        currentMessages.push(assistantMessage);
-
-        for (const toolCall of assistantMessage.tool_calls) {
-          if (toolCall.type !== "function") continue;
-          const name = toolCall.function.name;
-          const args = JSON.parse(toolCall.function.arguments);
-
-          _event.sender.send(Channels.TOOL_STATUS, {
-            name,
-            status: "start",
-            args,
-          });
-
-          const { result, updatedResume, updatedConfig } = await executeTool(
-            name,
-            args,
-            _event,
-            resume,
-            candidature,
-            selectedTheme,
-          );
-
-          if (updatedResume) {
-            finalResume = updatedResume;
-            resume = updatedResume; // Update for next tool calls
-          }
-          if (updatedConfig) {
-            finalConfig = updatedConfig;
-            candidature = updatedConfig; // Update for next tool calls
-          }
-
-          _event.sender.send(Channels.TOOL_STATUS, {
-            name,
-            status: "end",
-            result,
-          });
-
-          currentMessages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(result),
-          });
-        }
-
-        response = await client.chat.completions.create({
-          model: model,
-          messages: currentMessages,
-          tools: tools,
+      const runTool = async (
+        name: string,
+        toolArgs: Record<string, unknown>,
+      ): Promise<unknown> => {
+        _event.sender.send(Channels.TOOL_STATUS, {
+          name,
+          status: "start",
+          args: toolArgs,
         });
 
-        if (!response.choices || response.choices.length === 0) {
-          throw new Error("No response from AI agent during tool execution");
+        const { result, updatedResume, updatedConfig } = await executeTool(
+          name,
+          toolArgs,
+          _event,
+          resume,
+          candidature,
+          args.selectedTheme,
+        );
+
+        if (updatedResume) {
+          finalResume = updatedResume;
+          resume = updatedResume; // Update for next tool calls
         }
-        assistantMessage = response.choices[0].message;
-      }
+        if (updatedConfig) {
+          finalConfig = updatedConfig;
+          candidature = updatedConfig; // Update for next tool calls
+        }
+
+        _event.sender.send(Channels.TOOL_STATUS, {
+          name,
+          status: "end",
+          result,
+        });
+
+        return result;
+      };
+
+      const emitText = (content: string): void => {
+        _event.sender.send(Channels.CHAT_UPDATE, { content });
+      };
+
+      const { content } = await AiClientRouter.getInstance().runChat(args.api, {
+        apiKey: args.apiKey,
+        model: args.model,
+        baseURL: args.baseURL,
+        systemPrompt,
+        messages: args.messages,
+        runTool,
+        emitText,
+      });
 
       return {
-        content: assistantMessage.content || "No content returned",
+        content,
         updatedResume: finalResume,
         updatedConfig: finalConfig,
       };
@@ -793,24 +752,20 @@ ipcMain.handle(
       baseURL,
       apiKey,
       model,
+      api,
     }: {
       baseURL: string;
       apiKey: string;
       model: string;
+      api?: ProviderApi;
     },
   ) => {
     try {
-      const client = new OpenAI({
-        apiKey: apiKey || "ollama",
-        baseURL: baseURL,
+      await AiClientRouter.getInstance().testConnection(api, {
+        apiKey,
+        model,
+        baseURL,
       });
-
-      await client.chat.completions.create({
-        model: model,
-        messages: [{ role: "user", content: "Say hi" }],
-        max_tokens: 5,
-      });
-
       return { success: true };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

@@ -1,5 +1,6 @@
 import { CandidatureConfig } from "./candidature-types";
 import { Resume } from "./resume-types";
+import { ProviderApi } from "./provider-types";
 
 // Channel definitions
 export const Channels = {
@@ -72,6 +73,7 @@ export interface IPCHandlers {
       apiKey: string;
       model: string;
       baseURL: string;
+      api?: ProviderApi;
       resume: Resume;
       candidature: CandidatureConfig;
       selectedTheme?: string;
@@ -88,6 +90,7 @@ export interface IPCHandlers {
       baseURL: string;
       apiKey: string;
       model: string;
+      api?: ProviderApi;
     };
     response: {
       success: boolean;

@@ -7,11 +7,13 @@ import {
 } from "@/../shared/chat-types";
 import { Resume } from "@/../shared/resume-types";
 import { CandidatureConfig } from "@/../shared/candidature-types";
+import { ProviderApi } from "@/../shared/provider-types";
 
 interface UseChatOptions {
   apiKey: string;
   selectedModel: string;
   baseURL: string;
+  api?: ProviderApi;
   resume: Resume;
   candidature: CandidatureConfig;
   selectedTheme?: string;
@@ -23,6 +25,7 @@ export function useChat({
   apiKey,
   selectedModel,
   baseURL,
+  api,
   resume,
   candidature,
   selectedTheme,
@@ -99,6 +102,7 @@ export function useChat({
           apiKey,
           model: selectedModel,
           baseURL,
+          api,
           resume,
           candidature,
           selectedTheme,
@@ -148,6 +152,7 @@ export function useChat({
       input,
       apiKey,
       baseURL,
+      api,
       messages,
       selectedModel,
       resume,

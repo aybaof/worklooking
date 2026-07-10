@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Channels } from "@/../shared/ipc";
-import { PROVIDER_PRESETS, getPresetById } from "@/../shared/provider-types";
+import {
+  PROVIDER_PRESETS,
+  getPresetById,
+  ProviderApi,
+} from "@/../shared/provider-types";
 
 const DEFAULT_PROVIDER = "gemini";
 const DEFAULT_BASE_URL =
@@ -19,6 +23,11 @@ export function useSettings() {
   );
   const [selectedModel, setSelectedModel] = useState(
     localStorage.getItem("opencode_model") || DEFAULT_MODEL,
+  );
+  // Wire protocol for the custom provider. Presets define their own protocol;
+  // this override is only consulted when the "custom" provider is selected.
+  const [customApi, setCustomApi] = useState<ProviderApi>(
+    (localStorage.getItem("worklooking_custom_api") as ProviderApi) || "openai",
   );
   const [userDataPath, setUserDataPath] = useState("");
 
@@ -78,6 +87,10 @@ export function useSettings() {
     localStorage.setItem("worklooking_base_url", baseURL);
   }, [baseURL]);
 
+  useEffect(() => {
+    localStorage.setItem("worklooking_custom_api", customApi);
+  }, [customApi]);
+
   // When provider changes, update baseURL and model to preset defaults
   const handleProviderChange = useCallback((providerId: string) => {
     setSelectedProvider(providerId);
@@ -114,6 +127,11 @@ export function useSettings() {
   const currentPreset = getPresetById(selectedProvider);
   const providerPresets = PROVIDER_PRESETS;
 
+  // The custom provider lets the user choose the protocol; every other
+  // provider uses whatever its preset declares.
+  const api: ProviderApi =
+    selectedProvider === "custom" ? customApi : (currentPreset?.api ?? "openai");
+
   return {
     apiKey,
     setApiKey,
@@ -123,6 +141,9 @@ export function useSettings() {
     handleProviderChange,
     baseURL,
     setBaseURL,
+    api,
+    customApi,
+    setCustomApi,
     currentPreset,
     providerPresets,
     userDataPath,
