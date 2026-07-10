@@ -40,6 +40,7 @@ export default function App() {
     apiKey: settings.apiKey,
     selectedModel: settings.selectedModel,
     baseURL: settings.baseURL,
+    api: settings.api,
     resume: resume.resume,
     candidature: candidature.config,
     selectedTheme: templateSelection.selectedTheme,
@@ -157,6 +158,9 @@ export default function App() {
                         onProviderChange={settings.handleProviderChange}
                         baseURL={settings.baseURL}
                         setBaseURL={settings.setBaseURL}
+                        api={settings.api}
+                        customApi={settings.customApi}
+                        setCustomApi={settings.setCustomApi}
                         currentPreset={settings.currentPreset}
                         providerPresets={settings.providerPresets}
                         userDataPath={settings.userDataPath}

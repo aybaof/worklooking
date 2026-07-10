@@ -10,7 +10,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { FolderOpen, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Channels } from "@/../shared/ipc";
-import type { ProviderPreset } from "@/../shared/provider-types";
+import type {
+  ProviderPreset,
+  ProviderApi,
+} from "@/../shared/provider-types";
 
 interface IConfigurationPage {
   apiKey: string;
@@ -21,6 +24,9 @@ interface IConfigurationPage {
   onProviderChange: (providerId: string) => void;
   baseURL: string;
   setBaseURL: (v: string) => void;
+  api: ProviderApi;
+  customApi: ProviderApi;
+  setCustomApi: (v: ProviderApi) => void;
   currentPreset: ProviderPreset | undefined;
   providerPresets: ProviderPreset[];
   userDataPath: string;
@@ -41,6 +47,9 @@ export default function ConfigurationPage({
   onProviderChange,
   baseURL,
   setBaseURL,
+  api,
+  customApi,
+  setCustomApi,
   currentPreset,
   providerPresets,
   userDataPath,
@@ -50,9 +59,14 @@ export default function ConfigurationPage({
   const [testError, setTestError] = useState("");
 
   const hasPresetModels = currentPreset && currentPreset.models.length > 0;
-  const showApiKey = currentPreset ? currentPreset.requiresApiKey : true;
+  // Always show the API key field for the custom provider: an
+  // OpenAI-compatible endpoint may or may not require a key.
+  const showApiKey = currentPreset
+    ? currentPreset.requiresApiKey || currentPreset.id === "custom"
+    : true;
   const isCustomEndpoint =
     selectedProvider === "custom" || selectedProvider === "ollama";
+  const isCustomProvider = selectedProvider === "custom";
 
   async function handleTestConnection(): Promise<void> {
     if (!baseURL || !selectedModel) return;
@@ -65,6 +79,7 @@ export default function ConfigurationPage({
         baseURL,
         apiKey,
         model: selectedModel,
+        api,
       });
 
       if (result.success) {
@@ -109,6 +124,27 @@ export default function ConfigurationPage({
             </select>
           </div>
 
+          {/* API protocol — only relevant for the custom provider */}
+          {isCustomProvider && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Protocole API</label>
+              <select
+                className={selectClass}
+                value={customApi}
+                onChange={(e) => setCustomApi(e.target.value as ProviderApi)}
+              >
+                <option value="openai">OpenAI-compatible</option>
+                <option value="anthropic">
+                  Anthropic-compatible (Messages API)
+                </option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Choisissez « Anthropic-compatible » pour un point de
+                terminaison Azure AI Foundry Claude / Messages API.
+              </p>
+            </div>
+          )}
+
           {/* Endpoint URL */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Point de terminaison</label>
@@ -130,7 +166,17 @@ export default function ConfigurationPage({
           {/* API Key */}
           {showApiKey && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Clé API</label>
+              <label className="text-sm font-medium">
+                Clé API
+                {currentPreset &&
+                  !currentPreset.requiresApiKey &&
+                  currentPreset.id === "custom" && (
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      (optionnel)
+                    </span>
+                  )}
+              </label>
               <Input
                 type="password"
                 placeholder="Entrez votre clé API"
