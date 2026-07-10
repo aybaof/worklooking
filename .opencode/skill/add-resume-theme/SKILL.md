@@ -33,7 +33,9 @@ Themes render a JSON Resume into styled HTML (then a one-page A4 PDF).
 
 ## Verify
 
-- Type-check (`strict`).
+- `npm run typecheck` (`strict`).
+- `npm test` — keep `electron/themes/shared/render.test.ts` (registry parity /
+  renders each theme) green; add the new theme to its expected list.
 - `npm run dev`, then preview the theme through the `resume:render-preview` flow
   (see [`docs/ipc.md`](../../../docs/ipc.md)). Confirm the PDF stays on **one A4 page**.
 

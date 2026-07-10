@@ -33,8 +33,9 @@ every input in the main process.
 
 ## Verify
 
-- Type-check (`strict`): request/response types must line up across `shared/ipc.ts`,
-  the handler, and the hook.
+- `npm run typecheck` (`strict`): request/response types must line up across
+  `shared/ipc.ts`, the handler, and the hook.
+- `npm test` — add/extend tests for the handler and hook where practical.
 - `npm run dev` and exercise the flow. See [`docs/build.md`](../../../docs/build.md).
 
 ## Rules

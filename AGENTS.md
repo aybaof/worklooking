@@ -17,6 +17,7 @@ the task at hand instead of loading everything.
 | Adding or changing renderer↔main comms | [`docs/ipc.md`](docs/ipc.md) |
 | Working with hooks / state / persistence | [`docs/state.md`](docs/state.md) |
 | Building, running, packaging, scripts | [`docs/build.md`](docs/build.md) |
+| Writing / running tests | [`docs/build.md`](docs/build.md) → "Testing" + [`tests/TEST_PLAN.md`](tests/TEST_PLAN.md) |
 | Writing code (style, naming, security) | [`docs/conventions.md`](docs/conventions.md) |
 | Touching the shipped AI assistant / its tools | [`docs/agent.md`](docs/agent.md) |
 | Adding or editing a resume theme | [`docs/themes.md`](docs/themes.md) |
@@ -37,9 +38,37 @@ the task at hand instead of loading everything.
    - Rendering → a component in `src/components/` or page in `src/pages/`
 4. **Implement** following [`docs/conventions.md`](docs/conventions.md). Reuse existing
    patterns (typed IPC, path sanitization, hooks-own-logic).
-5. **Verify.** No test runner is wired up. Type-check (`strict`), then `npm run dev`
-   and exercise the affected flow. See [`docs/build.md`](docs/build.md).
-6. **Commit only when asked.** Match existing commit style; never commit secrets.
+5. **Verify.** Run `npm run typecheck` (both processes, `strict`) **and**
+   `npm test` (Vitest — node + renderer projects). Then `npm run dev` and
+   exercise the affected flow when behavior changed. See
+   [`docs/build.md`](docs/build.md) and the test inventory in
+   [`tests/TEST_PLAN.md`](tests/TEST_PLAN.md).
+6. **Commit only when asked.** Follow the convention below; never commit secrets.
+
+### Committing
+
+This repo uses **Conventional Commits**. Don't fetch `git log` for the style —
+use this:
+
+```
+<type>: <imperative, lowercase summary>
+
+<optional body: what & why, wrapped ~72 cols>
+```
+
+- **Types used here:** `feat`, `fix`, `docs`, `refactor`, `chore`.
+  (Bare version bumps like `1.1.0` also appear — release commits only.)
+- **Subject:** imperative mood, lowercase, no trailing period, ≤ ~72 chars.
+  A scope in parentheses is optional (e.g. `feat(agent): …`) and used sparingly.
+- **Stage only intended files.** Match the commit to one logical change; don't
+  sweep in unrelated edits. Inspect `git status` / `git diff` before committing.
+- **Never commit secrets** (API keys, `.env`, personal data under `candidatures/`).
+- **Verify first.** `npm run typecheck` and `npm test` must pass before committing.
+- **Don't push, amend, or open PRs unless explicitly asked.**
+
+Examples (real history): `fix: preserve resume image and personal data during AI chat`,
+`feat: add Anthropic-compatible provider with client router`,
+`docs: split docs into topic files, add opencode skills and doc-sync contract`.
 
 ### Common task → guide
 

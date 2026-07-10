@@ -10,7 +10,13 @@
     "make": "electron-forge make --platform win32 --arch x64",
     "make:all": "electron-forge make",
     "publish": "electron-forge publish",
-    "clean": "rm -rf .vite out dist dist-electron"
+    "clean": "rm -rf .vite out dist dist-electron",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:node": "vitest run --project node",
+    "test:renderer": "vitest run --project renderer",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p electron/tsconfig.json"
   },
   "author": "Aymeric Barakat",
   "description": "WorkLooking Agent - AI-powered resume and job application assistant",
@@ -56,6 +62,9 @@
     "@electron-forge/plugin-vite": "^7.11.1",
     "@electron-forge/publisher-github": "^7.11.1",
     "@electron/fuses": "^1.8.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/handlebars": "^4.0.40",
     "@types/node": "^25.0.9",
     "@types/pdf-parse": "^1.1.5",
@@ -63,13 +72,16 @@
     "@types/react-dom": "^19.2.3",
     "@types/sharp": "^0.31.1",
     "@vitejs/plugin-react": "^5.1.2",
+    "@vitest/ui": "^3.2.7",
     "electron": "^40.0.0",
     "flora-colossus": "^3.0.2",
+    "jsdom": "^29.1.1",
     "nodemon": "^3.1.11",
     "prettier": "^3.8.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^3.2.7"
   }
 }

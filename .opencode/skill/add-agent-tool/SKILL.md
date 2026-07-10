@@ -35,6 +35,8 @@ when generating resume files. Do **not** re-add PII to the prompt or tool descri
 
 ## Verify
 
-- Type-check (`strict`) — no `any` in your handler logic where avoidable.
+- `npm run typecheck` (`strict`) — no `any` in your handler logic where avoidable.
+- `npm test` — keep `electron/agent/tools.test.ts` (tools ↔ `executeTool` name
+  parity) green; add a case for the new tool.
 - `npm run dev`, open the chat, and confirm the model calls the tool and the
   `tool:status` / `chat:update` events fire. See [`docs/ipc.md`](../../../docs/ipc.md).
