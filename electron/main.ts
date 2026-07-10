@@ -22,6 +22,8 @@ import { Resume } from "../shared/resume-types";
 import { CandidatureConfig } from "../shared/candidature-types";
 import { updateElectronApp } from "update-electron-app";
 import { processImage } from "./utils/image-processor";
+import { IPCError, validateAndSanitizePath } from "./lib/paths";
+import { detectsAuthRequired } from "./lib/auth-detect";
 
 // Only check for updates in production
 if (app.isPackaged) {
@@ -29,35 +31,6 @@ if (app.isPackaged) {
 }
 
 if (require("electron-squirrel-startup")) app.quit();
-
-class IPCError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "IPCError";
-  }
-}
-
-function validateAndSanitizePath(filePath: string, basePath: string): string {
-  if (!filePath) {
-    throw new IPCError(ErrorCodes.INVALID_PATH, "Path is required");
-  }
-
-  const resolvedPath = path.isAbsolute(filePath)
-    ? filePath
-    : path.join(basePath, filePath);
-
-  const normalizedPath = path.normalize(resolvedPath);
-
-  // Prevent directory traversal
-  if (!normalizedPath.startsWith(basePath) && !path.isAbsolute(filePath)) {
-    throw new IPCError(ErrorCodes.INVALID_PATH, "Path traversal not allowed");
-  }
-
-  return normalizedPath;
-}
 
 // Paths configuration
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
@@ -118,47 +91,6 @@ async function renderResume({
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Theme rendering failed: ${message}`);
   }
-}
-
-function detectsAuthRequired(
-  initialUrl: string,
-  finalUrl: string,
-  pageTitle: string,
-): boolean {
-  // Conservative detection: only flag if we're very confident
-  const finalUrlLower = finalUrl.toLowerCase();
-  const titleLower = pageTitle.toLowerCase();
-
-  // Check 1: Explicit auth paths in URL
-  const authPaths = ["/login", "/signin", "/sign-in", "/auth", "/authenticate"];
-  if (authPaths.some((path) => finalUrlLower.includes(path))) {
-    return true;
-  }
-
-  // Check 2: Redirected to different domain with "login" in it
-  try {
-    const initialDomain = new URL(initialUrl).hostname;
-    const finalDomain = new URL(finalUrl).hostname;
-    if (
-      initialDomain !== finalDomain &&
-      (finalUrlLower.includes("login") || finalUrlLower.includes("signin"))
-    ) {
-      return true;
-    }
-  } catch (e) {
-    // Invalid URL, ignore this check
-  }
-
-  // Check 3: Page title explicitly mentions login/sign in
-  if (
-    titleLower.includes("sign in") ||
-    titleLower.includes("log in") ||
-    titleLower === "login"
-  ) {
-    return true;
-  }
-
-  return false; // Conservative: if unsure, assume no auth needed
 }
 
 async function fetchUrl(

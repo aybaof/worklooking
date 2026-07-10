@@ -13,13 +13,20 @@
  */
 import { vi } from "vitest";
 
+type Unsubscribe = () => void;
+
 export function installMockWindowApi() {
   const invoke = vi.fn();
-  const on = vi.fn(() => () => {}); // returns an unsubscribe fn
+  // Default: register nothing and hand back a no-op unsubscribe. Tests can
+  // override with `on.mockImplementation((channel, cb) => …)` to capture
+  // listeners and drive events.
+  const on = vi.fn(
+    (_channel: string, _callback: (data: unknown) => void): Unsubscribe =>
+      () => {},
+  );
   const once = vi.fn();
 
-  // @ts-expect-error test-only global assignment
-  window.api = { invoke, on, once };
+  window.api = { invoke, on, once } as unknown as typeof window.api;
 
   return { invoke, on, once };
 }

@@ -10,6 +10,13 @@ the commented-out imports, and delete this note as they go.
 > its tests pass under `npm test`, and any code it forced you to refactor
 > (e.g. exporting a function) is reflected in the relevant `docs/*.md`.
 
+> **Working rule (one test at a time):** implement and land tests **one `it(...)`
+> at a time**. After writing a single test, run it, confirm it passes, and
+> **pause for the human to review** that the assertion matches the intended
+> behavior before moving to the next stub. Do **not** batch-convert a whole file
+> of `it.todo` in one go — the reviewer needs to sign off that each test is
+> legit for what they have in mind.
+
 ---
 
 ## How the suite is wired (already done)
@@ -32,7 +39,11 @@ the commented-out imports, and delete this note as they go.
   | `npm run test:renderer` | `vitest run --project renderer` |
   | `npm run typecheck` | `tsc --noEmit` (renderer) + electron tsconfig |
 - **Fixtures:** `tests/fixtures/` (see its README; add sample PDF/PNG for Tier 4).
-- **Renderer IPC mock helper:** `tests/renderer/mockWindowApi.ts` (stub — flesh out).
+- **Renderer IPC mock helper:** `tests/renderer/mockWindowApi.ts` — installs a
+  typed mock `window.api` (`invoke`/`on`/`once` as `vi.fn()`). `on` defaults to a
+  no-op unsubscribe; override with `on.mockImplementation((channel, cb) => …)` to
+  capture listeners and drive `CHAT_UPDATE`/`TOOL_STATUS` events (see
+  `useChat.test.ts`).
 
 ### Conventions
 
@@ -108,24 +119,70 @@ Use fake timers for autosave/debounce.
    documented in the matching `docs/*.md` (AGENTS.md "Documentation is a contract").
 5. `docs/build.md` "Verification" section reflects the real workflow (already updated).
 
+## Refactors made to enable testing
+
+Keep this list in sync and reflect each in the relevant `docs/*.md`:
+
+- `electron/agent/aiClient.ts` — exported `isAzureEndpoint` (was module-private)
+  and extracted the OpenAI→Anthropic tool mapping into an exported pure
+  `toAnthropicTools(tools)` (the `AnthropicProvider` now calls it). Update
+  `docs/agent.md` public-surface notes.
+- (Earlier) `electron/lib/paths.ts` + `electron/lib/auth-detect.ts` — extracted
+  `validateAndSanitizePath`/`IPCError` and `detectsAuthRequired` from `main.ts`.
+- `tests/renderer/mockWindowApi.ts` — fleshed out from the original stub into a
+  typed `window.api` mock (no source change; test infra only). Tier 3 hooks
+  required no source refactors.
+- **Tier 4 required no source refactors.** `main.ts` exports nothing and runs
+  its handler registration as top-level side effects, so the integration test
+  imports it under a mocked `electron` (capturing `ipcMain.handle` callbacks)
+  plus mocked `electron-squirrel-startup` / `update-electron-app` and stubbed
+  Forge/Vite globals. The internal `executeTool` + `readPdf` are exercised
+  through the real `AI_CHAT` handler by mocking
+  `AiClientRouter.getInstance().runChat` to invoke the `runTool` callback — no
+  new exports needed. Provider `runChat` loops are tested via the router with
+  the `openai` / `@anthropic-ai/sdk` constructors mocked.
+
+## Notes / observations from Tier 3
+
+- `useResume` and `useCandidatureConfig` autosave effects list `isDirty` in their
+  dependency arrays (`useResume.ts:89`, `useCandidatureConfig.ts:87`), so the save
+  fires on the render after a mutation rather than strictly after the
+  `useDebounce(…, 1500)` window. Tests assert this real (effectively immediate)
+  behavior. Flagged as a potential defect, not fixed here.
+- `useResume` persists only to `localStorage` (no IPC), despite the original stub
+  mentioning IPC. Tests match the code.
+
+## Notes / observations from Tier 4
+
+- `validateAndSanitizePath` treats **absolute** paths as trusted (OS-dialog
+  callers), so directory-traversal rejection only applies to *relative* paths
+  that climb out of the base. The FILE_WRITE traversal test asserts the
+  relative-path case (`INVALID_PATH`) accordingly.
+- New checked-in fixtures: `tests/fixtures/sample.pdf` (contains
+  `WorkLooking sample PDF fixture`), `sample.png` (400×300, forces a resize),
+  `not-an-image.txt`. See `tests/fixtures/README.md`.
+- `readPdf` and `executeTool` are not exported; they're covered end-to-end
+  through the `AI_CHAT` IPC handler (mocked router `runChat` drives `runTool`).
+
 ## Progress checklist
 
-- [ ] Tier 1 — main.ts pure fns
-- [ ] Tier 1 — aiClient normalize/azure
-- [ ] Tier 1 — prompt PII stripping
-- [ ] Tier 1 — themes helpers + renderTheme
-- [ ] Tier 1 — provider-types
-- [ ] Tier 1 — cn
-- [ ] Tier 2 — AiClientRouter / tool mapping
-- [ ] Tier 2 — theme registry parity
-- [ ] Tier 2 — tools ↔ executeTool parity
-- [ ] Tier 3 — useResume
-- [ ] Tier 3 — useCandidatureConfig
-- [ ] Tier 3 — useSettings
-- [ ] Tier 3 — useTemplateSelection
-- [ ] Tier 3 — useChat
-- [ ] Tier 3 — useOnboarding
-- [ ] Tier 3 — useDebounce
-- [ ] Tier 4 — main.ts integration (IPC/fs/pdf/executeTool)
-- [ ] Tier 4 — image-processor
-- [ ] Tier 4 — provider runChat loops
+- [x] Tier 1 — main.ts pure fns
+- [x] Tier 1 — aiClient normalize/azure
+- [x] Tier 1 — prompt PII stripping
+- [x] Tier 1 — themes helpers + renderTheme
+- [x] Tier 1 — provider-types
+- [x] Tier 1 — cn
+- [x] Tier 2 — AiClientRouter (singleton) / tool mapping
+- [x] Tier 2 — theme registry parity
+- [x] Tier 2 — tools ↔ executeTool parity
+- [x] Tier 2/4 — AiClientRouter.resolve provider selection (covered by Tier 4 runChat w/ mocked SDK)
+- [x] Tier 3 — useResume
+- [x] Tier 3 — useCandidatureConfig
+- [x] Tier 3 — useSettings
+- [x] Tier 3 — useTemplateSelection
+- [x] Tier 3 — useChat
+- [x] Tier 3 — useOnboarding
+- [x] Tier 3 — useDebounce
+- [x] Tier 4 — main.ts integration (IPC/fs/pdf/executeTool)
+- [x] Tier 4 — image-processor
+- [x] Tier 4 — provider runChat loops

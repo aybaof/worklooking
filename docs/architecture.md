@@ -26,6 +26,9 @@ electron/                 # Main process
 │   ├── index.ts          # Theme registry (ThemeName union)
 │   ├── shared/render.ts  # Shared Handlebars rendering
 │   └── <theme>/          # index.ts + resume.hbs + style.css
+├── lib/                  # Pure, testable helpers used by main.ts
+│   ├── paths.ts          # IPCError + validateAndSanitizePath (traversal guard)
+│   └── auth-detect.ts    # detectsAuthRequired (fetch auth-wall heuristic)
 └── utils/
     └── image-processor.ts
 

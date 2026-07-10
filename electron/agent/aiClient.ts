@@ -72,10 +72,32 @@ export function normalizeAnthropicBaseURL(baseURL: string): string {
 }
 
 /** True when the endpoint is an Azure AI Foundry / Cognitive Services host. */
-function isAzureEndpoint(baseURL: string): boolean {
+export function isAzureEndpoint(baseURL: string): boolean {
   return /\.(azure\.com|cognitive\.microsoft\.com|services\.ai\.azure\.com)/i.test(
     baseURL,
   );
+}
+
+/**
+ * Map the OpenAI-style tool definitions into Anthropic's tool schema
+ * (name / description / input_schema). Exported for contract testing.
+ */
+export function toAnthropicTools(
+  openAiTools: OpenAI.Chat.ChatCompletionTool[],
+): Anthropic.Tool[] {
+  return openAiTools
+    .filter(
+      (t): t is OpenAI.Chat.ChatCompletionFunctionTool =>
+        t.type === "function",
+    )
+    .map((t) => ({
+      name: t.function.name,
+      description: t.function.description ?? "",
+      input_schema: (t.function.parameters ?? {
+        type: "object",
+        properties: {},
+      }) as Anthropic.Tool.InputSchema,
+    }));
 }
 
 // --- OpenAI (Chat Completions) adapter ---
@@ -154,19 +176,7 @@ class OpenAIProvider implements AiProvider {
 // --- Anthropic (Messages API) adapter ---
 class AnthropicProvider implements AiProvider {
   // Convert the OpenAI-style tool definitions into Anthropic's schema once.
-  private static anthropicTools: Anthropic.Tool[] = tools
-    .filter(
-      (t): t is OpenAI.Chat.ChatCompletionFunctionTool =>
-        t.type === "function",
-    )
-    .map((t) => ({
-      name: t.function.name,
-      description: t.function.description ?? "",
-      input_schema: (t.function.parameters ?? {
-        type: "object",
-        properties: {},
-      }) as Anthropic.Tool.InputSchema,
-    }));
+  private static anthropicTools: Anthropic.Tool[] = toAnthropicTools(tools);
 
   private clientFor(apiKey: string, baseURL: string): Anthropic {
     const normalized = normalizeAnthropicBaseURL(baseURL);

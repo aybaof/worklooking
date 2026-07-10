@@ -3,15 +3,36 @@
  *
  * See tests/TEST_PLAN.md → "Tier 1: provider-types".
  */
-import { describe, it } from "vitest";
-// import { getPresetById, PROVIDER_PRESETS } from "./provider-types";
+import { describe, it, expect } from "vitest";
+import { getPresetById, PROVIDER_PRESETS } from "./provider-types";
 
 describe("getPresetById", () => {
-  it.todo("returns the matching preset for a known id (openai/gemini/ollama/custom)");
-  it.todo("returns undefined for an unknown id");
+  it("returns the matching preset for a known id (openai/gemini/ollama/custom)", () => {
+    for (const id of ["openai", "gemini", "ollama", "custom"]) {
+      const preset = getPresetById(id);
+      expect(preset).toBeDefined();
+      expect(preset?.id).toBe(id);
+    }
+  });
+
+  it("returns undefined for an unknown id", () => {
+    expect(getPresetById("does-not-exist")).toBeUndefined();
+  });
 });
 
 describe("PROVIDER_PRESETS", () => {
-  it.todo("contains the expected preset ids");
-  it.todo("each preset has an api of 'openai' or 'anthropic'");
+  it("contains the expected preset ids", () => {
+    expect(PROVIDER_PRESETS.map((p) => p.id)).toEqual([
+      "openai",
+      "gemini",
+      "ollama",
+      "custom",
+    ]);
+  });
+
+  it("each preset has an api of 'openai' or 'anthropic'", () => {
+    for (const preset of PROVIDER_PRESETS) {
+      expect(["openai", "anthropic"]).toContain(preset.api);
+    }
+  });
 });

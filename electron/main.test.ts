@@ -1,30 +1,118 @@
 /**
- * Tier 1 — pure functions in electron/main.ts
+ * Tier 1 — pure functions extracted from electron/main.ts
  *
- * PREREQUISITE: `validateAndSanitizePath` and `detectsAuthRequired` are NOT
- * currently exported from `main.ts`. Refactor them into a testable module
- * (e.g. `electron/lib/paths.ts` and `electron/lib/auth-detect.ts`) and re-import
- * them in main.ts, OR add `export` to the functions. Update `docs/architecture.md`
- * accordingly. Then fix the imports below.
- *
- * See tests/TEST_PLAN.md → "Tier 1: main.ts".
+ * `validateAndSanitizePath` (+ `IPCError`) and `detectsAuthRequired` were
+ * extracted into `electron/lib/paths.ts` and `electron/lib/auth-detect.ts`
+ * so they can be unit-tested without importing the whole Electron main
+ * process. See tests/TEST_PLAN.md → "Tier 1: main.ts" and docs/architecture.md.
  */
-import { describe, it } from "vitest";
-// import { validateAndSanitizePath, detectsAuthRequired } from "./main";
+import path from "path";
+import { describe, it, expect } from "vitest";
+import { ErrorCodes } from "../shared/ipc";
+import { IPCError, validateAndSanitizePath } from "./lib/paths";
+import { detectsAuthRequired } from "./lib/auth-detect";
 
 describe("validateAndSanitizePath", () => {
-  it.todo("returns an absolute path when given a relative path under basePath");
-  it.todo("accepts an already-absolute path inside basePath");
-  it.todo("throws IPCError(INVALID_PATH) on directory traversal ('../')");
-  it.todo("throws IPCError(INVALID_PATH) on empty / whitespace input");
-  it.todo("normalizes redundant separators and '.' segments");
-  it.todo("blocks escaping basePath via an absolute path outside it");
+  const basePath = path.resolve("/base/dir");
+
+  it("returns an absolute path when given a relative path under basePath", () => {
+    const result = validateAndSanitizePath("sub/file.txt", basePath);
+    expect(path.isAbsolute(result)).toBe(true);
+    expect(result).toBe(path.join(basePath, "sub", "file.txt"));
+  });
+
+  it("accepts an already-absolute path inside basePath", () => {
+    const absInside = path.join(basePath, "nested", "file.txt");
+    const result = validateAndSanitizePath(absInside, basePath);
+    expect(result).toBe(path.normalize(absInside));
+  });
+
+  it("throws IPCError(INVALID_PATH) on directory traversal ('../')", () => {
+    try {
+      validateAndSanitizePath("../../etc/passwd", basePath);
+      expect.unreachable("should have thrown");
+    } catch (e) {
+      expect(e).toBeInstanceOf(IPCError);
+      expect((e as IPCError).code).toBe(ErrorCodes.INVALID_PATH);
+    }
+  });
+
+  it("throws IPCError(INVALID_PATH) on empty / whitespace input", () => {
+    try {
+      validateAndSanitizePath("", basePath);
+      expect.unreachable("should have thrown");
+    } catch (e) {
+      expect(e).toBeInstanceOf(IPCError);
+      expect((e as IPCError).code).toBe(ErrorCodes.INVALID_PATH);
+      expect((e as IPCError).message).toBe("Path is required");
+    }
+  });
+
+  it("normalizes redundant separators and '.' segments", () => {
+    const result = validateAndSanitizePath("sub/./inner/file.txt", basePath);
+    expect(result).toBe(path.join(basePath, "sub", "inner", "file.txt"));
+  });
+
+  it("blocks escaping basePath via a relative path that climbs out", () => {
+    try {
+      validateAndSanitizePath("sub/../../outside/file.txt", basePath);
+      expect.unreachable("should have thrown");
+    } catch (e) {
+      expect(e).toBeInstanceOf(IPCError);
+      expect((e as IPCError).code).toBe(ErrorCodes.INVALID_PATH);
+      expect((e as IPCError).message).toBe("Path traversal not allowed");
+    }
+  });
 });
 
 describe("detectsAuthRequired", () => {
-  it.todo("returns true when the final URL contains an auth path (e.g. /login)");
-  it.todo("returns true on cross-domain redirect to a host containing 'login'");
-  it.todo("returns true when the page title mentions sign in / connexion");
-  it.todo("returns false for a normal same-domain navigation");
-  it.todo("returns false when initial and final URLs match and title is benign");
+  it("returns true when the final URL contains an auth path (e.g. /login)", () => {
+    expect(
+      detectsAuthRequired(
+        "https://example.com/jobs/123",
+        "https://example.com/login",
+        "Example",
+      ),
+    ).toBe(true);
+  });
+
+  it("returns true on cross-domain redirect to a host containing 'login'", () => {
+    expect(
+      detectsAuthRequired(
+        "https://example.com/jobs/123",
+        "https://accounts.other.com/?redir=login",
+        "Redirecting",
+      ),
+    ).toBe(true);
+  });
+
+  it("returns true when the page title mentions sign in / connexion", () => {
+    expect(
+      detectsAuthRequired(
+        "https://example.com/jobs/123",
+        "https://example.com/jobs/123",
+        "Please Sign In to continue",
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false for a normal same-domain navigation", () => {
+    expect(
+      detectsAuthRequired(
+        "https://example.com/jobs/123",
+        "https://example.com/jobs/123/details",
+        "Software Engineer — Example",
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when initial and final URLs match and title is benign", () => {
+    expect(
+      detectsAuthRequired(
+        "https://example.com/jobs/123",
+        "https://example.com/jobs/123",
+        "Software Engineer — Example",
+      ),
+    ).toBe(false);
+  });
 });

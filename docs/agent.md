@@ -17,6 +17,10 @@ The tools are executed by `executeTool()` in `electron/main.ts` (~L535). The cha
 itself is driven by `AiClientRouter` (`aiClient.ts`), which `main.ts` calls from the
 `ai:chat` handler and passes a `runTool` callback into. See `docs/ipc.md`.
 
+`aiClient.ts` also exports a few pure helpers (used by the provider adapters and by
+the unit tests): `normalizeAnthropicBaseURL`, `isAzureEndpoint`, and
+`toAnthropicTools` (maps the OpenAI tool defs → Anthropic tool schema).
+
 ## Tools (`electron/agent/tools.ts`)
 
 Exactly 7 tools are defined, each with a **French** description:
