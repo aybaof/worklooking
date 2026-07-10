@@ -1,317 +1,94 @@
-# WorkLooking - Technical Conventions
+# WorkLooking — Agent Guide
 
-Electron application with TypeScript. React renderer, secure main process.
+WorkLooking is an **Electron + TypeScript** desktop app (secure Node.js main process,
+React 19 renderer) that helps tailor resumes and manage job applications with an
+in-app AI assistant.
 
-## Architecture Overview
-
-```
-├── electron/           # Main process (Node.js)
-│   ├── main.ts         # Entry point, window management, IPC handlers
-│   └── preload.ts      # contextBridge API (renderer ↔ main)
-├── shared/             # Shared types (imported by both processes)
-│   └── ipc.ts          # Channel names, request/response contracts
-├── src/                # Renderer process (React)
-│   ├── components/     # UI components (render + UX)
-│   ├── hooks/          # Business logic
-│   ├── pages/          # Route-level components
-│   ├── lib/            # Utilities, domain types
-│   └── styles/         # Global styles, Tailwind
-```
+This file is the **index and workflow** for coding agents. Read the specific doc for
+the task at hand instead of loading everything.
 
 ---
 
-## Main Process Security
+## Documentation index — read what you need
 
-### BrowserWindow Configuration
+| When you are… | Read |
+| ------------- | ---- |
+| Getting oriented / understanding structure | [`docs/architecture.md`](docs/architecture.md) |
+| Adding or changing renderer↔main comms | [`docs/ipc.md`](docs/ipc.md) |
+| Working with hooks / state / persistence | [`docs/state.md`](docs/state.md) |
+| Building, running, packaging, scripts | [`docs/build.md`](docs/build.md) |
+| Writing code (style, naming, security) | [`docs/conventions.md`](docs/conventions.md) |
+| Touching the shipped AI assistant / its tools | [`docs/agent.md`](docs/agent.md) |
+| Adding or editing a resume theme | [`docs/themes.md`](docs/themes.md) |
 
-```typescript
-new BrowserWindow({
-  webPreferences: {
-    contextIsolation: true,      // Required
-    nodeIntegration: false,      // Required
-    preload: path.join(__dirname, 'preload.js'),
-    sandbox: true                // Recommended
-  }
-})
-```
-
-### IPC Handler Guidelines
-
-- Validate all inputs from renderer
-- Sanitize file paths (prevent directory traversal)
-- Never trust renderer data implicitly
-- Return typed responses, throw typed errors
-
-```typescript
-ipcMain.handle('file:read', async (_, filePath: string) => {
-  const safePath = validateAndSanitizePath(filePath);
-  if (!safePath) throw new IPCError('INVALID_PATH', 'Path not allowed');
-  return fs.readFile(safePath, 'utf-8');
-});
-```
+> **Two different "agents":** the root `AGENTS.md` (this file) governs *dev workflow*.
+> `electron/agent/` is the *product's* shipped assistant — see `docs/agent.md`.
 
 ---
 
-## Shared Types (`shared/ipc.ts`)
+## Workflow
 
-Single source of truth for IPC contracts.
+1. **Orient.** Skim [`docs/architecture.md`](docs/architecture.md) if unfamiliar with the area.
+2. **Plan.** For multi-step work, keep a todo list and do one thing at a time.
+3. **Locate the boundary.** Decide which process/layer the change belongs to:
+   - Cross-process type/contract → `shared/`
+   - Node work (fs, network, AI, PDF) → `electron/main.ts` via an IPC handler
+   - UI logic/state → a hook in `src/hooks/`
+   - Rendering → a component in `src/components/` or page in `src/pages/`
+4. **Implement** following [`docs/conventions.md`](docs/conventions.md). Reuse existing
+   patterns (typed IPC, path sanitization, hooks-own-logic).
+5. **Verify.** No test runner is wired up. Type-check (`strict`), then `npm run dev`
+   and exercise the affected flow. See [`docs/build.md`](docs/build.md).
+6. **Commit only when asked.** Match existing commit style; never commit secrets.
 
-```typescript
-// Channel definitions
-export const Channels = {
-  FILE_READ: 'file:read',
-  FILE_WRITE: 'file:write',
-  DIALOG_OPEN: 'dialog:open',
-} as const;
+### Common task → guide
 
-// Type-safe request/response mapping
-export interface IPCHandlers {
-  'file:read': { request: { path: string }; response: string };
-  'file:write': { request: { path: string; content: string }; response: void };
-  'dialog:open': { request: { type: 'file' | 'folder' }; response: string | null };
-}
-
-// Error contract
-export interface IPCError {
-  code: string;
-  message: string;
-}
-```
-
-### Channel Naming Convention
-
-Pattern: `domain:action`
-
-| Domain | Actions |
-|--------|---------|
-| `file` | `read`, `write`, `delete` |
-| `dialog` | `open`, `save` |
-| `app` | `get-path`, `quit` |
-| `ai` | `chat`, `cancel` |
+| Task | Guide |
+| ---- | ----- |
+| Add an IPC channel | [`docs/ipc.md`](docs/ipc.md) → "Adding a channel" |
+| Add a resume theme | [`docs/themes.md`](docs/themes.md) → "Adding a theme" |
+| Add an AI agent tool | [`docs/agent.md`](docs/agent.md) → "Adding an agent tool" |
+| Add a page + hook | [`docs/state.md`](docs/state.md) + [`docs/conventions.md`](docs/conventions.md) |
 
 ---
 
-## Preload Script
+## Critical always-on rules
 
-Expose typed API via contextBridge.
-
-```typescript
-// electron/preload.ts
-import { contextBridge, ipcRenderer } from 'electron';
-import type { IPCHandlers } from '../shared/ipc';
-
-const api = {
-  invoke: <K extends keyof IPCHandlers>(
-    channel: K,
-    payload: IPCHandlers[K]['request']
-  ): Promise<IPCHandlers[K]['response']> => {
-    return ipcRenderer.invoke(channel, payload);
-  },
-  on: (channel: string, callback: (...args: unknown[]) => void) => {
-    ipcRenderer.on(channel, (_, ...args) => callback(...args));
-    return () => ipcRenderer.removeListener(channel, callback);
-  }
-};
-
-contextBridge.exposeInMainWorld('api', api);
-```
-
-```typescript
-// src/lib/electron.d.ts
-declare global {
-  interface Window {
-    api: typeof import('../../electron/preload').api;
-  }
-}
-```
+1. **Renderer is untrusted.** Never expose Node to the renderer; go through
+   `window.api.invoke` → typed IPC handler. Validate/sanitize every input in `main.ts`.
+2. **`shared/ipc.ts` is the single source of truth** for channels and their
+   request/response types. Change it in one place.
+3. **No `any`.** `strict: true` everywhere — use `unknown` + type guards.
+4. **Hooks own logic, components render.** Don't put business logic in components.
+5. **Keep security config intact:** `contextIsolation: true`, `nodeIntegration: false`,
+   `sandbox: true`.
+6. **Product text is French.** UI copy and `electron/agent/` content are French — match
+   the surrounding language. Code identifiers and these dev docs stay English.
+7. **Don't leak PII into the LLM prompt** — see `docs/agent.md`.
+8. **Docs must match code — always.** If you find any dissonance between the code and
+   the documentation (`docs/*.md`, this file, or `.opencode/skill/**`), you **MUST** fix
+   the documentation in the same change. See "Documentation is a contract" below.
 
 ---
 
-## Renderer Process (React)
+## Documentation is a contract
 
-### Core Principle
+The `docs/` files, this `AGENTS.md`, and the skills in `.opencode/skill/**` describe how
+the code actually works. Treat any mismatch as a defect.
 
-**Separation of concerns:**
-- **Hooks** → Business logic, state, side effects
-- **Components** → Render output, UX interactions
+**Hard rules:**
 
-### Hook Conventions
+- **Whenever you touch code that a doc describes, update that doc in the same change.**
+  Adding an IPC channel → update `docs/ipc.md`; adding an agent tool → update
+  `docs/agent.md` (incl. the tool table); adding a theme → the theme list in
+  `docs/themes.md`; changing scripts/build → `docs/build.md`; new hook/persistence →
+  `docs/state.md`.
+- **If you discover an existing dissonance** (doc says X, code does Y) while working —
+  even if unrelated to your task — **correct the doc to match the code** before finishing.
+  Code is the source of truth; the doc bends to it (unless the code is clearly a bug, in
+  which case flag it).
+- **Never leave a doc knowingly stale.** No "TODO: update docs later". Do it now.
+- **Verify, don't guess.** Base doc claims on the actual source (read `main.ts`,
+  `shared/ipc.ts`, `electron/agent/*`, `electron/themes/*`), not on assumptions.
 
-Hooks own the logic. Components consume the result.
-
-```typescript
-// hooks/useUser.ts
-export function useUser(id: string) {
-  const [user, setUser] = useState<User | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    window.api.invoke('user:get', { id })
-      .then(setUser)
-      .catch(setError)
-      .finally(() => setIsLoading(false));
-  }, [id]);
-
-  return { user, error, isLoading };
-}
-```
-
-### Component Conventions
-
-Components handle rendering and user interactions only.
-
-```typescript
-// components/UserCard.tsx
-export function UserCard({ userId }: { userId: string }) {
-  const { user, error, isLoading } = useUser(userId);
-
-  if (error) return <ErrorFallback error={error} />;
-  if (isLoading) return <Skeleton />;
-
-  return (
-    <Card>
-      <h2>{user.name}</h2>
-      <p>{user.email}</p>
-    </Card>
-  );
-}
-```
-
-### State Management
-
-**Prefer local state.** Each component manages its own state via hooks.
-
-Avoid:
-- Prop drilling beyond 2 levels
-- Provider-heavy architectures
-- Global state for local concerns
-
-Use Context only for:
-- Theme/appearance
-- Authentication state
-- App-wide configuration
-
-```typescript
-// Acceptable: minimal context for truly global state
-const ThemeContext = createContext<'light' | 'dark'>('light');
-
-// Avoid: over-contextualized local state
-const FormContext = createContext<FormState>(null); // Don't do this
-```
-
----
-
-## Error Handling
-
-### ErrorBoundary (Route Level)
-
-```typescript
-// components/ErrorBoundary.tsx
-export class ErrorBoundary extends Component<Props, State> {
-  state = { error: null };
-
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-
-  render() {
-    if (this.state.error) {
-      return <ErrorFallback error={this.state.error} onRetry={this.reset} />;
-    }
-    return this.props.children;
-  }
-}
-```
-
-### Async Error Pattern
-
-```typescript
-// In hooks - catch and expose errors
-const [error, setError] = useState<IPCError | null>(null);
-
-try {
-  const result = await window.api.invoke('file:read', { path });
-  return result;
-} catch (e) {
-  setError(e as IPCError);
-}
-```
-
-### IPC Error Handling (Main Process)
-
-```typescript
-class IPCError extends Error {
-  constructor(public code: string, message: string) {
-    super(message);
-  }
-}
-
-// Handler
-ipcMain.handle('file:read', async (_, { path }) => {
-  if (!isValidPath(path)) {
-    throw new IPCError('INVALID_PATH', 'Access denied');
-  }
-  // ...
-});
-```
-
----
-
-## Code Style
-
-### TypeScript
-
-- `strict: true` in all tsconfig files
-- No `any` types (use `unknown` + type guards)
-- Explicit return types on exported functions
-- Prefer `interface` over `type` for object shapes
-
-### Patterns
-
-- Early returns over nested conditions
-- Small, focused functions (< 30 lines)
-- Destructure props at function signature
-- Colocate types with usage
-
-```typescript
-// Good: early return
-function getUser(id: string): User | null {
-  if (!id) return null;
-  if (!cache.has(id)) return null;
-  return cache.get(id);
-}
-
-// Avoid: nested conditions
-function getUser(id: string): User | null {
-  if (id) {
-    if (cache.has(id)) {
-      return cache.get(id);
-    }
-  }
-  return null;
-}
-```
-
-### File Naming
-
-| Type | Convention | Example |
-|------|------------|---------|
-| Components | PascalCase | `UserCard.tsx` |
-| Hooks | camelCase with `use` prefix | `useUser.ts` |
-| Utilities | camelCase | `formatDate.ts` |
-| Types | camelCase with `-types` suffix | `resume-types.ts` |
-| IPC Channels | kebab-case domain:action | `file:read` |
-
----
-
-## Summary
-
-| Concern | Location | Responsibility |
-|---------|----------|----------------|
-| Security | `electron/main.ts` | contextIsolation, input validation |
-| IPC Types | `shared/ipc.ts` | Channel contracts, type safety |
-| API Bridge | `electron/preload.ts` | contextBridge exposure |
-| Logic | `src/hooks/` | State, effects, business rules |
-| Render | `src/components/` | UI output, event handlers |
-| Errors | `ErrorBoundary` + typed errors | Graceful degradation |
+This keeps the router/skills trustworthy for the next agent.
