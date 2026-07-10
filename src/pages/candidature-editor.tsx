@@ -157,18 +157,8 @@ export default function CandidatureEditorPage({
                     onUpdateSkill={updateCandidateSkill}
                     onAddSkill={addCandidateSkill}
                     onRemoveSkill={removeCandidateSkill}
-                    onUpdateStrengths={(v) =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        candidate: { ...prev.candidate, strengths: v },
-                      }))
-                    }
-                    onUpdateLanguages={(v) =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        candidate: { ...prev.candidate, languages: v },
-                      }))
-                    }
+                    onUpdateStrengths={(v) => updateCandidate("strengths", v)}
+                    onUpdateLanguages={(v) => updateCandidate("languages", v)}
                   />
                 )}
 
@@ -176,12 +166,7 @@ export default function CandidatureEditorPage({
                   <GoalsSection
                     goals={config.goals}
                     onUpdate={updateGoals}
-                    onUpdateCriteria={(v) =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        goals: { ...prev.goals, criteria: v },
-                      }))
-                    }
+                    onUpdateCriteria={(v) => updateGoals("criteria", v)}
                   />
                 )}
 
