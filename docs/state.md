@@ -11,7 +11,7 @@
 | Hook | Responsibility |
 | ---- | -------------- |
 | `useChat` | Message history, typing state, AI stream handling |
-| `useSettings` | API key, selected model, user data path |
+| `useSettings` | API key, provider preset, base URL, model, custom wire protocol, user data path |
 | `useResume` | Load/save/update resume JSON |
 | `useCandidatureConfig` | Job application criteria and history |
 | `useOnboarding` | First-run onboarding flow |
@@ -21,9 +21,12 @@
 
 | Data | Storage key / location | Owner hook |
 | ---- | ---------------------- | ---------- |
-| API key | `localStorage` | `useSettings` |
-| Model | `localStorage` | `useSettings` |
-| User data path | `localStorage` | `useSettings` |
+| API key | `localStorage` (`opencode_api_key`) | `useSettings` |
+| Model | `localStorage` (`opencode_model`) | `useSettings` |
+| Provider preset | `localStorage` (`worklooking_provider`) | `useSettings` |
+| Base URL | `localStorage` (`worklooking_base_url`) | `useSettings` |
+| Custom wire protocol | `localStorage` (`worklooking_custom_api`, `openai`\|`anthropic`) | `useSettings` |
+| User data path | `localStorage` (`worklooking_data_path`) + main process | `useSettings` |
 | Resume JSON | `localStorage` | `useResume` |
 | Candidature config | `localStorage` | `useCandidatureConfig` |
 | Selected theme | `localStorage` | `useTemplateSelection` |

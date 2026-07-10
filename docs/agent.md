@@ -11,9 +11,11 @@
 | `agent.md` | Instructions for the shipped assistant (French). Bundled via Forge `extraResource`. |
 | `prompt.ts` | Builds the system prompt (injects source resume + config, strips PII). |
 | `tools.ts` | OpenAI function-tool definitions the agent can call. |
+| `aiClient.ts` | `AiClientRouter` — provider adapters (OpenAI Chat Completions + Anthropic Messages) behind one interface; runs the chat/tool loop and connection tests. |
 
-The tool loop that executes these tools lives in `electron/main.ts` (`executeTool`, ~L533),
-driven by the `ai:chat` channel. See `docs/ipc.md`.
+The tools are executed by `executeTool()` in `electron/main.ts` (~L535). The chat loop
+itself is driven by `AiClientRouter` (`aiClient.ts`), which `main.ts` calls from the
+`ai:chat` handler and passes a `runTool` callback into. See `docs/ipc.md`.
 
 ## Tools (`electron/agent/tools.ts`)
 

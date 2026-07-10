@@ -20,6 +20,7 @@ electron/                 # Main process
 ├── agent/                # The app's SHIPPED AI assistant (product, not dev tooling)
 │   ├── tools.ts          # OpenAI function-tool definitions
 │   ├── prompt.ts         # System prompt builder
+│   ├── aiClient.ts       # AiClientRouter: OpenAI + Anthropic provider adapters
 │   └── agent.md          # Product agent instructions (job-search assistant)
 ├── themes/               # Resume themes (Handlebars)
 │   ├── index.ts          # Theme registry (ThemeName union)
@@ -32,6 +33,7 @@ shared/                   # Cross-process types (source of truth)
 ├── ipc.ts                # Channels, IPCHandlers, ErrorCodes
 ├── resume-types.ts       # JSON Resume schema
 ├── candidature-types.ts  # CandidatureConfig
+├── provider-types.ts     # ProviderApi, ProviderPreset, PROVIDER_PRESETS
 └── chat-types.ts         # Chat message / tool payloads
 
 src/                      # Renderer (React 19 + react-router-dom)

@@ -22,6 +22,7 @@ All renderer↔main communication is typed and centralized in `shared/ipc.ts`.
 | `image:select-and-optimize` | R → M | Pick + optimize an image (sharp), returns data URL |
 | `resume:render-preview` | R → M | Render resume JSON to HTML for a theme |
 | `ai:chat` | R → M | Send messages to the AI agent (runs tool loop) |
+| `ai:test-connection` | R → M | Validate provider `baseURL`/`apiKey`/`model` with a tiny request |
 
 ## Events (`window.api.on`)
 
@@ -43,10 +44,20 @@ All renderer↔main communication is typed and centralized in `shared/ipc.ts`.
 
 ## AI tool loop (`ai:chat`)
 
-`electron/main.ts` runs an OpenAI function-calling loop:
+The `ai:chat` handler in `electron/main.ts` runs a provider-agnostic function-calling loop:
 
-1. Receives `messages`, `apiKey`, `model`, `resume`, `candidature`, `selectedTheme`.
-2. Calls OpenAI with tools from `electron/agent/tools.ts`.
-3. Executes each tool call locally via `executeTool()` (`main.ts` ~L533).
-4. Streams progress via `chat:update` and `tool:status`.
-5. Returns final response with optional `updatedResume` / `updatedConfig`.
+1. Receives `messages`, `apiKey`, `model`, `baseURL`, `api` (`"openai" | "anthropic"`),
+   `resume`, `candidature`, `selectedTheme`.
+2. Builds the system prompt via `GenerateSystemPrompt` (`electron/agent/prompt.ts`).
+3. Delegates the chat loop to `AiClientRouter.getInstance().runChat(api, …)`
+   (`electron/agent/aiClient.ts`), which selects the OpenAI or Anthropic adapter.
+4. The adapter drives the tool loop, calling back into the `runTool` callback, which
+   invokes `executeTool()` (`main.ts` ~L535) for each tool from `electron/agent/tools.ts`.
+5. Streams progress via `chat:update` and `tool:status`.
+6. Returns final response with optional `updatedResume` / `updatedConfig`.
+
+## Provider connection test (`ai:test-connection`)
+
+`AiClientRouter.getInstance().testConnection(api, …)` issues a minimal request against the
+configured `baseURL` / `apiKey` / `model` (`api` picks the OpenAI or Anthropic adapter) and
+returns `{ success, error? }`. Handler in `electron/main.ts` ~L748.
