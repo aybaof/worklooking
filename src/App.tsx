@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useResume } from "./hooks/useResume";
 import { useCandidatureConfig } from "./hooks/useCandidatureConfig";
 import { useTemplateSelection } from "./hooks/useTemplateSelection";
+import { useTheme } from "./hooks/useTheme";
 
 const pageVariants = {
   initial: {
@@ -35,6 +36,7 @@ export default function App() {
   const resume = useResume();
   const candidature = useCandidatureConfig();
   const templateSelection = useTemplateSelection();
+  const theme = useTheme();
 
   const chat = useChat({
     apiKey: settings.apiKey,
@@ -165,6 +167,8 @@ export default function App() {
                         providerPresets={settings.providerPresets}
                         userDataPath={settings.userDataPath}
                         onSelectFolder={settings.handleSelectFolder}
+                        mode={theme.mode}
+                        setMode={theme.setMode}
                       />
                     </GuidanceManager>
                   </ErrorBoundary>

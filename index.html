@@ -5,6 +5,30 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WorkLooking - Agent</title>
+    <!--
+      Anti-flash (FOUC) guard: resolve the stored theme and apply the `.dark`
+      class before the module bundle loads so the correct appearance paints
+      first. `useTheme` re-applies the same class on mount idempotently and is
+      the single source of truth thereafter. Dependency-free and defensive.
+    -->
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem("worklooking_theme");
+          if (mode !== "light" && mode !== "dark" && mode !== "system") {
+            mode = "system";
+          }
+          var isDark =
+            mode === "dark" ||
+            (mode === "system" &&
+              typeof window.matchMedia === "function" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", isDark);
+        } catch (e) {
+          // localStorage/matchMedia unavailable — fall back to light (no class).
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

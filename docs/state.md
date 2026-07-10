@@ -16,6 +16,7 @@
 | `useCandidatureConfig` | Job application criteria and history |
 | `useOnboarding` | First-run onboarding flow |
 | `useTemplateSelection` | Selected resume theme |
+| `useTheme` | App UI appearance mode (light/dark/system), `.dark` class + OS `matchMedia` subscription |
 
 ## Persistence
 
@@ -30,6 +31,7 @@
 | Resume JSON | `localStorage` | `useResume` |
 | Candidature config | `localStorage` | `useCandidatureConfig` |
 | Selected theme | `localStorage` | `useTemplateSelection` |
+| App theme | `localStorage` (`worklooking_theme`, `light`\|`dark`\|`system`) | `useTheme` |
 | Chat messages | React `useState` | `useChat` |
 
 ## Data flow

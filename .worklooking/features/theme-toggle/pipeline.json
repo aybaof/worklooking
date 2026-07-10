@@ -1,0 +1,9 @@
+{
+  "slug": "theme-toggle",
+  "title": "App UI theme toggle (light / dark / system)",
+  "idea": "lets implement theme-toogle that follow also design",
+  "stage": "commit",
+  "status": "committed",
+  "updated": "2026-07-10",
+  "notes": "Committed via feature-committer: single Conventional Commit with confirmed file list and message."
+}

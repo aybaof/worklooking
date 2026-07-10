@@ -14,6 +14,8 @@ import type {
   ProviderPreset,
   ProviderApi,
 } from "@/../shared/provider-types";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import type { ThemeMode } from "@/hooks/useTheme";
 
 interface IConfigurationPage {
   apiKey: string;
@@ -31,6 +33,8 @@ interface IConfigurationPage {
   providerPresets: ProviderPreset[];
   userDataPath: string;
   onSelectFolder: () => void;
+  mode: ThemeMode;
+  setMode: (mode: ThemeMode) => void;
 }
 
 type TestStatus = "idle" | "testing" | "success" | "error";
@@ -54,6 +58,8 @@ export default function ConfigurationPage({
   providerPresets,
   userDataPath,
   onSelectFolder,
+  mode,
+  setMode,
 }: IConfigurationPage) {
   const [testStatus, setTestStatus] = useState<TestStatus>("idle");
   const [testError, setTestError] = useState("");
@@ -243,6 +249,18 @@ export default function ConfigurationPage({
               </span>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Apparence</CardTitle>
+          <CardDescription>
+            Choisissez le thème de l'application.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ThemeToggle mode={mode} onModeChange={setMode} />
         </CardContent>
       </Card>
 
