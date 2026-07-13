@@ -117,6 +117,20 @@ function makeEvent() {
   };
 }
 
+/** Recursively list every file path under a directory (sorted, for snapshots). */
+function listFilesRecursive(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (d: string) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else out.push(full);
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return out.sort();
+}
+
 /** Invoke a captured IPC handler by channel. */
 async function invoke(channel: string, ...args: unknown[]): Promise<unknown> {
   const handler = handlers.get(channel);
@@ -150,7 +164,8 @@ const MIN_CANDIDATURE: CandidatureConfig = {
 beforeAll(async () => {
   // Importing registers all handlers via the mocked ipcMain.handle.
   await import("./main");
-});
+}, 30000); // generous timeout: the one-time module import can be slow under
+// parallel suite load on CI/dev machines (avoids a flaky 10s hook timeout).
 
 afterAll(() => {
   fs.rmSync(TMP_ROOT, { recursive: true, force: true });
@@ -343,11 +358,113 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
     })) as { updatedResume?: Resume | null };
 
     expect((toolResult as { success: boolean }).success).toBe(true);
-    // Image preserved from the source; other fields (name) allowed to change.
+    // `save_source_resume` preserves the source image in-memory by mutating the
+    // incoming payload; other fields (name) are allowed to change.
+    expect(incoming.basics?.image).toBe("data:image/png;base64,AAAA");
+    expect(incoming.basics?.name).toBe("Modifié");
+    // Base-CV save is NOT the feedback-modal trigger and does not persist via the
+    // chat: it does NOT return `updatedResume`. Only the write-free
+    // `render_resume_html` proposal tool sets `updatedResume`.
+    expect(chatResponse.updatedResume).toBeFalsy();
+  });
+
+  it("render_resume_html returns updatedResume (in-memory) and writes NO file (AC-1)", async () => {
+    const sourceResume: Resume = {
+      basics: { name: "Jean Source", image: "data:image/png;base64,IMG" },
+    };
+    // Proposed tailored resume the model would pass to render_resume_html.
+    // Keep it to `basics` only — the same minimal shape the RESUME_RENDER_PREVIEW
+    // test uses — so the theme renders cleanly in the headless test env.
+    const proposed: Resume = { basics: { name: "Écrasé" } };
+
+    // Snapshot the temp userData tree so we can assert nothing was written.
+    const filesBefore = listFilesRecursive(TMP_ROOT);
+
+    let toolResult: unknown;
+    let chatResponse: { updatedResume?: Resume | null } = {};
+    runChatImpl = async (options) => {
+      toolResult = await options.runTool("render_resume_html", {
+        resumeJson: proposed,
+      } as unknown as Record<string, unknown>);
+      return { content: "voici votre proposition" };
+    };
+
+    chatResponse = (await invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: sourceResume,
+      candidature: MIN_CANDIDATURE,
+      selectedTheme: "professional",
+    })) as { updatedResume?: Resume | null };
+
+    // The tool succeeded and reported an HTML size but returned NO html/pdf path
+    // (write-free — the renderer previews via resume:render-preview instead).
+    const res = toolResult as {
+      success: boolean;
+      htmlSize?: number;
+      htmlPath?: string;
+      pdfPath?: string;
+    };
+    expect(res.success).toBe(true);
+    expect(res.htmlSize).toBeGreaterThan(0);
+    expect(res.htmlPath).toBeUndefined();
+    expect(res.pdfPath).toBeUndefined();
+
+    // The proposal opens the modal: ai:chat returns updatedResume (in-memory).
+    // Basics were restored from the source resume (PII restored at render time).
+    expect(chatResponse.updatedResume).toBeTruthy();
     expect(chatResponse.updatedResume?.basics?.image).toBe(
-      "data:image/png;base64,AAAA",
+      "data:image/png;base64,IMG",
     );
-    expect(chatResponse.updatedResume?.basics?.name).toBe("Modifié");
+
+    // No file was written anywhere under userData by the render.
+    const filesAfter = listFilesRecursive(TMP_ROOT);
+    expect(filesAfter).toEqual(filesBefore);
+  });
+
+  it("generate_resume_files writes HTML + PDF but does NOT return updatedResume (AC-1)", async () => {
+    const sourceResume: Resume = { basics: { name: "Jean Source" } };
+    const proposed: Resume = { basics: { name: "X" } };
+
+    let toolResult: unknown;
+    let chatResponse: { updatedResume?: Resume | null } = {};
+    runChatImpl = async (options) => {
+      toolResult = await options.runTool("generate_resume_files", {
+        resumeJson: proposed,
+        htmlPath: "candidatures/gen/resume.html",
+        pdfPath: "candidatures/gen/resume.pdf",
+      } as unknown as Record<string, unknown>);
+      return { content: "fichiers générés" };
+    };
+
+    chatResponse = (await invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: sourceResume,
+      candidature: MIN_CANDIDATURE,
+      selectedTheme: "professional",
+    })) as { updatedResume?: Resume | null };
+
+    // The tool reports success (HTML at minimum; PDF may or may not succeed in a
+    // headless test env — either the full-success or partial-success shape).
+    const res = toolResult as {
+      success: boolean;
+      htmlPath?: string;
+      htmlSize?: number;
+    };
+    expect(res.success).toBe(true);
+    // The HTML file was actually written to disk (write-only behavior).
+    expect(fs.existsSync(path.join(TMP_ROOT, "candidatures", "gen", "resume.html"))).toBe(
+      true,
+    );
+
+    // Crucially: it is write-only and must NOT re-open the modal — no
+    // updatedResume comes back to the renderer (v5 revert of the v4 trigger).
+    expect(chatResponse.updatedResume).toBeFalsy();
   });
 
   it("returns an error for an unknown tool name", async () => {

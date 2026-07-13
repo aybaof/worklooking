@@ -79,9 +79,11 @@ candidatures/
 2. **Préparer le dossier** : Utiliser `write_file` pour créer les fichiers dans le sous-dossier de candidature.
 3. **Sauvegarder l'offre** dans `offre.md`.
 4. **Générer le `resume.json` adapté** (basé sur le `resume.json` source).
-5. **Générer les fichiers du CV** : Utiliser `generate_resume_files` pour créer automatiquement `resume.html` ET `resume.pdf` en une seule étape. L'outil génère le HTML à partir du JSON Resume adapté et le convertit immédiatement en PDF.
-6. **Rédiger la lettre de motivation** si nécessaire.
-7. **Mettre à jour le suivi** via `save_candidature_config` dans la section `applications`.
+5. **Proposer le CV adapté** : Utiliser `render_resume_html` pour générer un APERÇU HTML du CV **sans écrire aucun fichier**. L'aperçu est présenté à l'utilisateur pour relecture et retours. Ne PAS appeler `generate_resume_files` à cette étape.
+6. **Itérer** : Si l'utilisateur envoie des retours, ajuster le `resume.json` et rappeler `render_resume_html` pour proposer la version révisée.
+7. **Générer les fichiers du CV** (SEULEMENT après validation de l'utilisateur) : Utiliser `generate_resume_files` pour créer automatiquement `resume.html` ET `resume.pdf` en une seule étape. Cette étape écrit les fichiers sur le disque et ne doit intervenir qu'après la validation explicite de la proposition.
+8. **Rédiger la lettre de motivation** si nécessaire.
+9. **Mettre à jour le suivi** via `save_candidature_config` dans la section `applications`.
 
 ### 2. Adaptation du CV (resume.json)
 

@@ -10,13 +10,14 @@
 
 | Hook | Responsibility |
 | ---- | -------------- |
-| `useChat` | Message history, typing state, AI stream handling |
+| `useChat` | Message history, typing state, AI stream handling. Owns the authoritative feedback-loop conversation; exposes `sendFeedbackMessage` (continues the same conversation for regeneration/validation) and `onTailoredResume` (opens the feedback modal when `ai:chat` returns `updatedResume`) |
 | `useSettings` | API key, provider preset, base URL, model, custom wire protocol, user data path |
 | `useResume` | Load/save/update resume JSON |
 | `useCandidatureConfig` | Job application criteria and history |
 | `useOnboarding` | First-run onboarding flow |
 | `useTemplateSelection` | Selected resume theme |
 | `useTheme` | App UI appearance mode (light/dark/system), `.dark` class + OS `matchMedia` subscription |
+| `useFeedbackLoop` | CV feedback loop **as an in-app modal in the main window** (single-window design): holds the current tailored resume, draft per-section comments, round, and themed preview. Drives regeneration/validation by continuing the SAME conversation via `useChat.sendFeedbackMessage` — never calls `ai:chat` directly. The conversation history lives in `useChat`; the hook holds only ephemeral loop state (comments/round/preview) |
 
 ## Persistence
 
@@ -32,7 +33,9 @@
 | Candidature config | `localStorage` | `useCandidatureConfig` |
 | Selected theme | `localStorage` | `useTemplateSelection` |
 | App theme | `localStorage` (`worklooking_theme`, `light`\|`dark`\|`system`) | `useTheme` |
-| Chat messages | React `useState` | `useChat` |
+| Chat messages / feedback-loop conversation history | React `useState` (ephemeral) | `useChat` |
+| Feedback-loop draft comments + round + preview | React `useState` only (ephemeral; not persisted) | `useFeedbackLoop` (main window modal) |
+| Validated resume (after Valider) | persisted to `localStorage` via `setResumeByAi` | `useResume` |
 
 ## Data flow
 

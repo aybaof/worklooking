@@ -555,11 +555,50 @@ async function executeTool(
             htmlSize: html.length,
           };
         }
+
+        // NOTE: `generate_resume_files` is write-only and intentionally does NOT
+        // set `updatedResume`. It writes the HTML + PDF to disk and returns its
+        // result object. The feedback-modal trigger is the write-free
+        // `render_resume_html` tool (the CV-proposal step). This tool is invoked
+        // only after the user validates, so file generation cannot re-open the
+        // modal.
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         result = {
           success: false,
           error: `Resume generation failed: ${message}`,
+        };
+      }
+      break;
+    case "render_resume_html":
+      // Write-free CV *proposal* step. Renders the tailored resume to HTML via
+      // the same `renderResume` helper as `generate_resume_files` but WITHOUT
+      // writing any file. Setting `updatedResume` (in-memory only) is what opens
+      // the feedback modal in the renderer so the user can review + comment
+      // before the final `generate_resume_files` write on validation.
+      // Preserve basics from the source resume (PII restored at render time,
+      // consistent with the PII rule — the model never receives PII).
+      if (sourceResume?.basics && args.resumeJson) {
+        args.resumeJson.basics = { ...sourceResume.basics };
+      }
+      try {
+        const html = await renderResume({
+          resumeJson: args.resumeJson,
+          themeName: selectedTheme || "modern-sidebar",
+        });
+        result = {
+          success: true,
+          message:
+            "Aperçu du CV généré. La proposition est affichée à l'utilisateur pour relecture avant la génération finale.",
+          htmlSize: html.length,
+        };
+        // In-memory only — no file written. This opens the feedback modal.
+        updatedResume = args.resumeJson;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        result = {
+          success: false,
+          error: `Resume rendering failed: ${message}`,
         };
       }
       break;
@@ -574,7 +613,12 @@ async function executeTool(
         // Keep the original image (base64 data)
         args.resumeJson.basics.image = sourceResume.basics.image;
       }
-      updatedResume = args.resumeJson;
+      // NOTE: `save_source_resume` intentionally does NOT set `updatedResume`.
+      // It is only used for the base résumé (never called when tailoring to a job
+      // offer), so it must not open the feedback modal. The modal trigger is the
+      // write-free `render_resume_html` proposal tool (the CV-proposal step). The
+      // image/basics preservation above still applies so the frontend persists the
+      // correct data.
       result = {
         success: true,
         message:
@@ -599,75 +643,114 @@ async function executeTool(
   return { result, updatedResume, updatedConfig };
 }
 
+/**
+ * Shared provider chat/tool-loop runner used by BOTH the `ai:chat` handler and
+ * the feedback-loop rounds so there is a single implementation (no duplication).
+ *
+ * `ctx` carries the provider credentials, the resume/candidature/theme used to
+ * build the system prompt and execute tools, and the message history to send.
+ * `event` is the invoking `IpcMainInvokeEvent` — progress events (`tool:status`
+ * / `chat:update`) are sent to `event.sender`, so both the initial tailoring
+ * turn and the in-app feedback-loop rounds flow back to the same main window.
+ */
+async function runChatLoop(
+  ctx: {
+    messages: Array<{ role: string; content: string | null }>;
+    apiKey: string;
+    model: string;
+    baseURL: string;
+    api?: ProviderApi;
+    resume: Resume;
+    candidature: CandidatureConfig;
+    selectedTheme?: string;
+  },
+  event: IpcMainInvokeEvent,
+): Promise<{
+  content: string;
+  updatedResume: Resume | null;
+  updatedConfig: CandidatureConfig | null;
+}> {
+  const systemPrompt = GenerateSystemPrompt(ctx.candidature, ctx.resume);
+
+  // The router runs the provider agent loop and calls back into this closure
+  // for each tool. State (resume/config) is tracked here so the router stays
+  // protocol-only.
+  let resume = ctx.resume;
+  let candidature = ctx.candidature;
+  let finalResume: Resume | null = null;
+  let finalConfig: CandidatureConfig | null = null;
+
+  const runTool = async (
+    name: string,
+    toolArgs: Record<string, unknown>,
+  ): Promise<unknown> => {
+    event.sender.send(Channels.TOOL_STATUS, {
+      name,
+      status: "start",
+      args: toolArgs,
+    });
+
+    const { result, updatedResume, updatedConfig } = await executeTool(
+      name,
+      toolArgs,
+      event,
+      resume,
+      candidature,
+      ctx.selectedTheme,
+    );
+
+    if (updatedResume) {
+      finalResume = updatedResume;
+      resume = updatedResume; // Update for next tool calls
+    }
+    if (updatedConfig) {
+      finalConfig = updatedConfig;
+      candidature = updatedConfig; // Update for next tool calls
+    }
+
+    event.sender.send(Channels.TOOL_STATUS, {
+      name,
+      status: "end",
+      result,
+    });
+
+    return result;
+  };
+
+  const emitText = (content: string): void => {
+    event.sender.send(Channels.CHAT_UPDATE, { content });
+  };
+
+  const { content } = await AiClientRouter.getInstance().runChat(ctx.api, {
+    apiKey: ctx.apiKey,
+    model: ctx.model,
+    baseURL: ctx.baseURL,
+    systemPrompt,
+    messages: ctx.messages,
+    runTool,
+    emitText,
+  });
+
+  return {
+    content,
+    updatedResume: finalResume,
+    updatedConfig: finalConfig,
+  };
+}
+
 ipcMain.handle(
   Channels.AI_CHAT,
-  async (_event: IpcMainInvokeEvent, args: ChatArgs) => {
+  async (event: IpcMainInvokeEvent, args: ChatArgs) => {
     try {
-      const systemPrompt = GenerateSystemPrompt(args.candidature, args.resume);
-
-      // The router runs the provider agent loop and calls back into this
-      // closure for each tool. State (resume/config) is tracked here so the
-      // router stays protocol-only.
-      let resume = args.resume;
-      let candidature = args.candidature;
-      let finalResume: Resume | null = null;
-      let finalConfig: CandidatureConfig | null = null;
-
-      const runTool = async (
-        name: string,
-        toolArgs: Record<string, unknown>,
-      ): Promise<unknown> => {
-        _event.sender.send(Channels.TOOL_STATUS, {
-          name,
-          status: "start",
-          args: toolArgs,
-        });
-
-        const { result, updatedResume, updatedConfig } = await executeTool(
-          name,
-          toolArgs,
-          _event,
-          resume,
-          candidature,
-          args.selectedTheme,
-        );
-
-        if (updatedResume) {
-          finalResume = updatedResume;
-          resume = updatedResume; // Update for next tool calls
-        }
-        if (updatedConfig) {
-          finalConfig = updatedConfig;
-          candidature = updatedConfig; // Update for next tool calls
-        }
-
-        _event.sender.send(Channels.TOOL_STATUS, {
-          name,
-          status: "end",
-          result,
-        });
-
-        return result;
-      };
-
-      const emitText = (content: string): void => {
-        _event.sender.send(Channels.CHAT_UPDATE, { content });
-      };
-
-      const { content } = await AiClientRouter.getInstance().runChat(args.api, {
-        apiKey: args.apiKey,
-        model: args.model,
-        baseURL: args.baseURL,
-        systemPrompt,
-        messages: args.messages,
-        runTool,
-        emitText,
-      });
+      const { content, updatedResume, updatedConfig } = await runChatLoop(
+        args,
+        event,
+      );
 
       return {
         content,
-        updatedResume: finalResume,
-        updatedConfig: finalConfig,
+        updatedResume,
+        updatedConfig,
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

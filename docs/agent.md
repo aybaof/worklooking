@@ -23,20 +23,35 @@ the unit tests): `normalizeAnthropicBaseURL`, `isAzureEndpoint`, and
 
 ## Tools (`electron/agent/tools.ts`)
 
-Exactly 7 tools are defined, each with a **French** description:
+Exactly 8 tools are defined, each with a **French** description:
 
 | Tool | Purpose |
 | ---- | ------- |
 | `read_file` | Read a local file (relative or absolute path). |
 | `write_file` | Create/update a file in the user data dir (auto-creates parent dirs). |
 | `save_candidature_config` | Persist the full `CandidatureConfig` (profile/tracking). |
-| `generate_resume_files` | Render resume JSON → HTML + PDF at given paths. |
+| `render_resume_html` | **Propose** a tailored CV: render resume JSON → HTML **without writing any file**. Returns only a size/summary (not the full HTML) and sets `updatedResume` in-memory, which opens the feedback modal. The pre-validation proposal step. |
+| `generate_resume_files` | Render resume JSON → HTML + PDF at given paths (write-only). The final step, called only after the user validates. Does **not** set `updatedResume`. |
 | `save_source_resume` | Save the main source resume (base CV only). |
 | `fetch_url` | Fetch text content of a URL (persistent session; may return `needsAuth`). |
 | `read_pdf` | Extract text from a PDF (absolute path). |
 
 Each has a matching `case` in `executeTool()` (`electron/main.ts`) — the switch handles
-these exact 7 names and no others.
+these exact 8 names and no others.
+
+### Resume-tailoring flow
+
+The tailoring loop is a purely conversational, ephemeral proposal step — nothing is
+written to disk until the user validates:
+
+1. The agent **proposes** the tailored CV by calling `render_resume_html`, which renders
+   the HTML preview **without writing any file** and sets `updatedResume` (in-memory).
+2. `ai:chat` returns that `updatedResume`, which opens the in-app **feedback modal** where
+   the user reviews the proposal and can leave per-section comments (regeneration rounds
+   re-call `render_resume_html`, still write-free).
+3. On **Valider**, a confirmation message drives the agent to call `generate_resume_files`,
+   which writes the final HTML + PDF to disk; the resume is then persisted. See
+   `docs/ipc.md` → "CV feedback loop".
 
 ## Adding an agent tool (workflow)
 
