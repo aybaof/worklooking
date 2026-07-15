@@ -23,6 +23,21 @@ describe("buildRegenerationMessage", () => {
     expect(message).toContain("Compétences : Ajoute React");
   });
 
+  it("includes a French PII-free scoping hint to change only the listed sections (AC-9)", () => {
+    const comments: SectionComment[] = [
+      { sectionId: "work", comment: "Trop long, résume" },
+    ];
+    const message = buildRegenerationMessage(comments);
+
+    // Non-authoritative hint telling the LLM to touch only the listed sections
+    // and leave everything else (incl. PII) unchanged.
+    expect(message).toContain("Modifie UNIQUEMENT les sections listées");
+    expect(message.toLowerCase()).toContain("inchangées");
+    // The hint itself introduces no field values — only fixed instruction text.
+    expect(message).not.toContain("Jean Dupont");
+    expect(message).not.toContain("jean.dupont@example.com");
+  });
+
   it("ignores comments that are blank", () => {
     const comments: SectionComment[] = [
       { sectionId: "work", comment: "   " },

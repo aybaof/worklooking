@@ -67,6 +67,15 @@ written to disk until the user validates:
 
 `prompt.ts` (`GenerateSystemPrompt`) rebuilds `basics` to keep **only** `summary` and
 `label`, dropping every other `basics` field (name, email, phone, url, image, location,
-profiles, …) from the LLM context. Full personal data is **restored automatically** when
-tools like `generate_resume_files` run, so generated HTML/PDF contain complete data. Don't
-re-add PII to the prompt.
+profiles) from the LLM context. Don't re-add PII to the prompt.
+
+**Restore after the model responds.** When `render_resume_html` (proposal/preview) and
+`generate_resume_files` (final write) run, `restoreBasicsPii()` (in `electron/main.ts`,
+list kept in sync with `prompt.ts`) restores **only the true PII fields** —
+`name`, `email`, `phone`, `url`, `image`, `location`, `profiles` — from the source resume.
+It **preserves** the model-tailored `summary` and `label` from the proposal (these are the
+two fields intentionally kept in the model context so they can be adapted). This is why a
+profile/summary comment in the feedback loop now takes effect: the tailored
+`basics.summary`/`basics.label` are no longer reverted to the source. The same restore
+logic runs in both tools so the preview and the final HTML/PDF stay consistent. Note the
+restore only affects what the model receives *back*; the model still never *receives* PII.

@@ -36,6 +36,7 @@ function baseProps(overrides: Partial<Parameters<typeof FeedbackModal>[0]> = {})
     round: 0,
     error: null,
     changes: [],
+    commentedSectionIds: [],
     activeTool: null,
     hasComments: false,
     setComment: vi.fn(),
@@ -192,7 +193,9 @@ describe("FeedbackModal", () => {
           round: 1,
           changes: [
             {
-              label: "Résumé / Profil",
+              label: "Expérience professionnelle #1 — Poste",
+              sectionId: "work",
+              sectionLabel: "Expérience professionnelle",
               before: "Ancien",
               after: "Nouveau",
             },
@@ -203,7 +206,9 @@ describe("FeedbackModal", () => {
 
     const panel = screen.getByTestId("round-diff-panel");
     expect(panel).not.toBeNull();
-    expect(within(panel).getByText("Résumé / Profil")).not.toBeNull();
+    expect(
+      within(panel).getByText("Expérience professionnelle #1 — Poste"),
+    ).not.toBeNull();
     expect(within(panel).getByText("Ancien")).not.toBeNull();
     expect(within(panel).getByText("Nouveau")).not.toBeNull();
   });

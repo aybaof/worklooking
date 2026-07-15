@@ -370,12 +370,25 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
 
   it("render_resume_html returns updatedResume (in-memory) and writes NO file (AC-1)", async () => {
     const sourceResume: Resume = {
-      basics: { name: "Jean Source", image: "data:image/png;base64,IMG" },
+      basics: {
+        name: "Jean Source",
+        image: "data:image/png;base64,IMG",
+        summary: "Résumé source",
+        label: "Titre source",
+      },
     };
     // Proposed tailored resume the model would pass to render_resume_html.
     // Keep it to `basics` only — the same minimal shape the RESUME_RENDER_PREVIEW
     // test uses — so the theme renders cleanly in the headless test env.
-    const proposed: Resume = { basics: { name: "Écrasé" } };
+    // The model tries to overwrite PII (name) but tailors summary/label: only PII
+    // is restored from source; summary/label are preserved (see restoreBasicsPii).
+    const proposed: Resume = {
+      basics: {
+        name: "Écrasé",
+        summary: "Résumé adapté par le modèle",
+        label: "Titre adapté par le modèle",
+      },
+    };
 
     // Snapshot the temp userData tree so we can assert nothing was written.
     const filesBefore = listFilesRecursive(TMP_ROOT);
@@ -413,10 +426,20 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
     expect(res.pdfPath).toBeUndefined();
 
     // The proposal opens the modal: ai:chat returns updatedResume (in-memory).
-    // Basics were restored from the source resume (PII restored at render time).
+    // PII fields were restored from the source resume (name/image) at render time.
     expect(chatResponse.updatedResume).toBeTruthy();
     expect(chatResponse.updatedResume?.basics?.image).toBe(
       "data:image/png;base64,IMG",
+    );
+    expect(chatResponse.updatedResume?.basics?.name).toBe("Jean Source");
+    // ...but the model-tailored summary/label are PRESERVED (NOT reverted to
+    // source) — this is the scope-addition fix so profile/summary feedback takes
+    // effect in the preview/proposal. See restoreBasicsPii.
+    expect(chatResponse.updatedResume?.basics?.summary).toBe(
+      "Résumé adapté par le modèle",
+    );
+    expect(chatResponse.updatedResume?.basics?.label).toBe(
+      "Titre adapté par le modèle",
     );
 
     // No file was written anywhere under userData by the render.
@@ -424,9 +447,94 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
     expect(filesAfter).toEqual(filesBefore);
   });
 
+  it("render_resume_html restores PII from source but keeps the LLM summary/label (scope fix)", async () => {
+    // Regression test for "commenting on the profile does nothing": the model's
+    // tailored summary/label must survive, while all true PII is restored from
+    // the source resume. Every PII field differs between source and model here.
+    const sourceResume: Resume = {
+      basics: {
+        name: "Jean Source",
+        email: "jean@source.fr",
+        phone: "+33 1 00 00 00 00",
+        url: "https://source.example",
+        image: "data:image/png;base64,SRC",
+        location: { city: "Paris", countryCode: "FR" },
+        profiles: [
+          { network: "LinkedIn", username: "jsource", url: "https://li/jsource" },
+        ],
+        summary: "Ancien résumé du CV source",
+        label: "Ancien titre source",
+      },
+    };
+    // The model rewrote EVERYTHING in basics, including PII, plus a new
+    // summary/label from a profile comment.
+    const proposed: Resume = {
+      basics: {
+        name: "Modèle Écrasé",
+        email: "modele@llm.fr",
+        phone: "+00 000",
+        url: "https://llm.example",
+        image: "data:image/png;base64,LLM",
+        location: { city: "Lyon", countryCode: "US" },
+        profiles: [{ network: "X", username: "llm", url: "https://x/llm" }],
+        summary: "Nouveau résumé adapté par le modèle",
+        label: "Nouveau titre adapté",
+      },
+    };
+
+    let chatResponse: { updatedResume?: Resume | null } = {};
+    runChatImpl = async (options) => {
+      await options.runTool("render_resume_html", {
+        resumeJson: proposed,
+      } as unknown as Record<string, unknown>);
+      return { content: "proposition" };
+    };
+
+    chatResponse = (await invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: sourceResume,
+      candidature: MIN_CANDIDATURE,
+      selectedTheme: "professional",
+    })) as { updatedResume?: Resume | null };
+
+    const basics = chatResponse.updatedResume?.basics;
+    expect(basics).toBeTruthy();
+    // PII restored verbatim from source (NOT the model's values).
+    expect(basics?.name).toBe("Jean Source");
+    expect(basics?.email).toBe("jean@source.fr");
+    expect(basics?.phone).toBe("+33 1 00 00 00 00");
+    expect(basics?.url).toBe("https://source.example");
+    expect(basics?.image).toBe("data:image/png;base64,SRC");
+    expect(basics?.location).toEqual(sourceResume.basics?.location);
+    expect(basics?.profiles).toEqual(sourceResume.basics?.profiles);
+    // summary/label PRESERVED from the model (NOT reverted to source).
+    expect(basics?.summary).toBe("Nouveau résumé adapté par le modèle");
+    expect(basics?.label).toBe("Nouveau titre adapté");
+  });
+
   it("generate_resume_files writes HTML + PDF but does NOT return updatedResume (AC-1)", async () => {
-    const sourceResume: Resume = { basics: { name: "Jean Source" } };
-    const proposed: Resume = { basics: { name: "X" } };
+    const sourceResume: Resume = {
+      basics: {
+        name: "Jean Source",
+        email: "jean@source.fr",
+        summary: "Résumé source",
+        label: "Titre source",
+      },
+    };
+    // The model overwrites PII (name/email) and tailors summary/label. The final
+    // write step restores ONLY PII from source and preserves summary/label — the
+    // same restore behavior as render_resume_html (restoreBasicsPii).
+    const proposed: Resume = {
+      basics: {
+        name: "X",
+        email: "x@modele.fr",
+        summary: "Résumé adapté par le modèle",
+        label: "Titre adapté par le modèle",
+      },
+    };
 
     let toolResult: unknown;
     let chatResponse: { updatedResume?: Resume | null } = {};
@@ -465,6 +573,24 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
     // Crucially: it is write-only and must NOT re-open the modal — no
     // updatedResume comes back to the renderer (v5 revert of the v4 trigger).
     expect(chatResponse.updatedResume).toBeFalsy();
+
+    // Restore behavior (consistent with render_resume_html): the tool mutates the
+    // proposed payload in place before rendering. ONLY PII (name/email) is
+    // restored from the source; the model-tailored summary/label are PRESERVED so
+    // profile/summary feedback survives into the final HTML+PDF. See
+    // restoreBasicsPii.
+    expect(proposed.basics?.name).toBe("Jean Source");
+    expect(proposed.basics?.email).toBe("jean@source.fr");
+    expect(proposed.basics?.summary).toBe("Résumé adapté par le modèle");
+    expect(proposed.basics?.label).toBe("Titre adapté par le modèle");
+
+    // The written HTML reflects the preserved LLM summary/label, not the source.
+    const generatedHtml = fs.readFileSync(
+      path.join(TMP_ROOT, "candidatures", "gen", "resume.html"),
+      "utf8",
+    );
+    expect(generatedHtml).toContain("Titre adapté par le modèle");
+    expect(generatedHtml).not.toContain("Titre source");
   });
 
   it("returns an error for an unknown tool name", async () => {

@@ -55,8 +55,13 @@ describe("useFeedbackLoop (modal)", () => {
     expect(result.current.round).toBe(0);
   });
 
-  it("submitComments compiles the PII-free French message, replaces resume + clears comments (AC-7)", async () => {
-    const updatedResume: Resume = { basics: { summary: "Nouveau" } };
+  it("submitComments compiles the PII-free French message, applies the scoped merge + clears comments (AC-7)", async () => {
+    // The LLM returns a full resume; only the commented `work` section is taken
+    // from it, `basics` (PII) is restored verbatim from the pre-regen resume.
+    const updatedResume: Resume = {
+      basics: { summary: "Piraté" },
+      work: [{ name: "ACME", position: "Ingénieur" }],
+    };
     const send = vi.fn().mockResolvedValue({ resume: updatedResume });
     const { result } = renderHook(() =>
       useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
@@ -72,7 +77,11 @@ describe("useFeedbackLoop (modal)", () => {
         { sectionId: "work", comment: "Résume cette section" },
       ]),
     );
-    expect(result.current.resume).toEqual(updatedResume);
+    // Commented section comes from the LLM; basics (not commented) stays as seed.
+    expect(result.current.resume).toEqual({
+      basics: { summary: "Profil" },
+      work: [{ name: "ACME", position: "Ingénieur" }],
+    });
     expect(result.current.comments).toEqual({});
     expect(result.current.round).toBe(1);
   });
@@ -286,29 +295,68 @@ describe("useFeedbackLoop (modal)", () => {
       useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
     );
 
-    act(() => result.current.setComment("work", "Ajoute des détails"));
+    // Comment on `summary` so basics.summary (the commented field) flows through
+    // the scoped merge and the diff picks it up.
+    act(() => result.current.setComment("summary", "Ajoute des détails"));
     await act(async () => {
       await result.current.submitComments();
     });
 
-    // `changes` exposes the leaf diff between the previous and new resume.
+    // `changes` exposes the leaf diff between the previous and merged resume.
     expect(result.current.changes.length).toBeGreaterThan(0);
     const summaryChange = result.current.changes.find(
       (c) => c.label === "Résumé / Profil",
     );
     expect(summaryChange?.before).toBe("Profil");
     expect(summaryChange?.after).toBe("Résumé retravaillé");
+    // The commented ids for this round are exposed for the no-op indicator.
+    expect(result.current.lastRoundCommentedIds).toEqual(["summary"]);
 
     // PII-safety: the message sent through sendFeedbackMessage contains ONLY the
     // built regeneration message (labels + comments), never any diff VALUE.
     const sentArg = send.mock.calls[0][0] as string;
     expect(sentArg).toBe(
       buildRegenerationMessage([
-        { sectionId: "work", comment: "Ajoute des détails" },
+        { sectionId: "summary", comment: "Ajoute des détails" },
       ]),
     );
     expect(sentArg).not.toContain("Résumé retravaillé");
-    expect(sentArg).not.toContain("Profil");
+  });
+
+  it("computes the round diff against the MERGED resume, not the raw LLM output (AC-7)", async () => {
+    // The LLM alters BOTH the commented `work` section and the NON-commented
+    // `basics.summary`. Only `work` is in scope, so the merge must drop the
+    // summary change and the diff (computed against the merged resume) must
+    // contain ONLY the work change — never the raw-LLM summary edit.
+    const updatedResume: Resume = {
+      basics: { summary: "DÉRIVE NON DEMANDÉE" },
+      work: [{ name: "ACME", position: "Ingénieur" }],
+    };
+    const send = vi.fn().mockResolvedValue({ resume: updatedResume });
+    const { result } = renderHook(() =>
+      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
+    );
+
+    act(() => result.current.setComment("work", "Ajoute le poste"));
+    await act(async () => {
+      await result.current.submitComments();
+    });
+
+    // Applied resume = scoped merge: work from LLM, basics.summary restored.
+    expect(result.current.resume).toEqual({
+      basics: { summary: "Profil" },
+      work: [{ name: "ACME", position: "Ingénieur" }],
+    });
+    // Diff is against the merged resume: the non-commented summary drift is
+    // absent; no change references the raw LLM summary value.
+    const summaryDrift = result.current.changes.find(
+      (c) => c.after === "DÉRIVE NON DEMANDÉE",
+    );
+    expect(summaryDrift).toBeUndefined();
+    expect(
+      result.current.changes.every((c) => c.sectionId === "work"),
+    ).toBe(true);
+    expect(result.current.changes.length).toBeGreaterThan(0);
   });
 
   it("discards ephemeral comments/round when unmounted and remounted (AC-9)", async () => {

@@ -32,6 +32,8 @@ describe("diffResumes (AC-9)", () => {
     expect(changes).toHaveLength(1);
     expect(changes[0]).toEqual({
       label: "Résumé / Profil",
+      sectionId: "summary",
+      sectionLabel: "Résumé / Profil",
       before: "Ancien profil",
       after: "Nouveau profil",
     });
@@ -81,6 +83,8 @@ describe("diffResumes labeling (AC-10)", () => {
     expect(changes).toHaveLength(1);
     expect(changes[0]).toEqual({
       label: "Résumé / Profil",
+      sectionId: "summary",
+      sectionLabel: "Résumé / Profil",
       before: "",
       after: "Ajouté",
     });
@@ -95,6 +99,8 @@ describe("diffResumes labeling (AC-10)", () => {
     expect(changes).toHaveLength(1);
     expect(changes[0]).toEqual({
       label: "Résumé / Profil",
+      sectionId: "summary",
+      sectionLabel: "Résumé / Profil",
       before: "À retirer",
       after: "",
     });

@@ -74,7 +74,13 @@ the existing conversation directly.
    here. `updatedResume` is produced by the write-free **`render_resume_html`**
    tool (the CV-*proposal* step): its `executeTool` case renders the resume to
    HTML via `renderResume` **without writing any file** and sets `updatedResume =
-   args.resumeJson` (in-memory only) on success, but not on a render failure. The
+   args.resumeJson` (in-memory only) on success, but not on a render failure.
+   Before rendering, both `render_resume_html` and `generate_resume_files` call
+   `restoreBasicsPii()` to restore **only** the true PII fields
+   (`name`/`email`/`phone`/`url`/`image`/`location`/`profiles`) from the source
+   resume while **preserving** the model-tailored `summary` and `label` from the
+   proposal — so a profile/summary comment is reflected in both the preview and
+   the final HTML/PDF (see `docs/agent.md` → PII handling). The
    write-only **`generate_resume_files`** tool does **not** set `updatedResume`
    (it writes the final HTML + PDF to disk and is called only after validation, so
    the validation-triggered generation cannot re-open the modal).
@@ -88,11 +94,24 @@ the existing conversation directly.
 3. Each round, the modal compiles the PII-free French message
    (`shared/feedbackMessages.ts`) and calls `useChat.sendFeedbackMessage`, which
    **appends** the message to the SAME conversation and re-runs `ai:chat` (one
-   implementation, not a duplicate). The agent re-proposes via `render_resume_html`
-   (still write-free), so the round returns a new `updatedResume`. Progress/lock
-   UX uses `useChat.activeTool` driven by `chat:update` / `tool:status`. The new
-   resume replaces the preview and comments are cleared. Regeneration is
-   ephemeral — nothing is persisted mid-loop.
+   implementation, not a duplicate). The message includes a **non-authoritative**
+   French scoping hint telling the LLM to change ONLY the commented sections and
+   leave the rest (incl. personal info) unchanged. The agent re-proposes via
+   `render_resume_html` (still write-free), so the round returns a new
+   `updatedResume`. Progress/lock UX uses `useChat.activeTool` driven by
+   `chat:update` / `tool:status`.
+   The raw `updatedResume` is **never applied verbatim**. `useFeedbackLoop`
+   applies a **deterministic section-scoped merge** (`shared/resumeMerge.ts`,
+   `mergeScopedResume(preRegen, updatedResume, comments)`): only the commented
+   sections are taken from the LLM output; every other section, the entire
+   `basics` block (PII), `meta`, and any unknown top-level key are restored
+   verbatim from the pre-regen resume. `summary` maps ONLY to `basics.summary`.
+   This is the source of truth regardless of LLM compliance with the prompt hint.
+   The round diff shown in `RoundDiffPanel` is computed against the **merged**
+   resume (`diffResumes(preRegen, merged)`), grouped by section, and flags
+   commented sections the LLM left unchanged. The merged resume replaces the
+   preview and comments are cleared. Regeneration is ephemeral — nothing is
+   persisted mid-loop.
 4. Validate compiles the French validation message and runs the same turn, which
    triggers `generate_resume_files` (the write-only step that produces the final
    HTML + PDF and returns **no** `updatedResume`). On success the modal persists
@@ -101,8 +120,11 @@ the existing conversation directly.
    only here — never on the intermediate proposals.
 
 The regeneration/validation messages carry **only section labels + user
-comments** — never resume PII field values — consistent with the prompt
-PII-stripping described in `docs/agent.md`.
+comments** (plus the fixed French scoping hint) — never resume PII field
+values — consistent with the prompt PII-stripping described in `docs/agent.md`.
+The scoped merge and the round diff run in the renderer AFTER the reply; their
+values may hold PII but are used for in-modal display / local application only
+and never flow into a prompt.
 
 ## Provider connection test (`ai:test-connection`)
 

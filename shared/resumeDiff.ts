@@ -13,6 +13,15 @@ import { getResumeSectionLabel } from "./resume-sections";
 export interface ResumeFieldChange {
   /** Human-readable French label built from the field path. */
   label: string;
+  /**
+   * Structured grouping key for the change's section. Matches a
+   * `RESUME_SECTIONS` id (`summary` for `basics.summary`), the `"__basics"`
+   * sentinel for other `basics.*` fields, otherwise the top-level Resume key.
+   * Lets `RoundDiffPanel` group without re-parsing `label`.
+   */
+  sectionId: string;
+  /** French section label for `sectionId` (header text in the round diff). */
+  sectionLabel: string;
   /** Previous stringified value (`""` when added). */
   before: string;
   /** New stringified value (`""` when removed). */
@@ -106,6 +115,20 @@ function topLevelLabel(path: PathSegment[]): string {
   return getResumeSectionLabel(first);
 }
 
+/**
+ * Structured grouping key for a leaf path (see `ResumeFieldChange.sectionId`).
+ * `basics.summary` → `"summary"`; other `basics.*` → `"__basics"` sentinel;
+ * otherwise the top-level Resume key. Empty string for a malformed path.
+ */
+function topLevelSectionId(path: PathSegment[]): string {
+  const first = path[0];
+  if (first === undefined || typeof first !== "string") return "";
+  if (first === "basics") {
+    return path[1] === "summary" ? "summary" : "__basics";
+  }
+  return first;
+}
+
 type PathSegment = string | number;
 
 /**
@@ -151,7 +174,13 @@ function walk(
     const before = stringifyLeaf(prev);
     const after = stringifyLeaf(next);
     if (before !== after) {
-      changes.push({ label: buildLabel(path), before, after });
+      changes.push({
+        label: buildLabel(path),
+        sectionId: topLevelSectionId(path),
+        sectionLabel: topLevelLabel(path),
+        before,
+        after,
+      });
     }
     return;
   }
@@ -183,7 +212,13 @@ function walk(
   const before = stringifyLeaf(prev);
   const after = stringifyLeaf(next);
   if (before !== after) {
-    changes.push({ label: buildLabel(path), before, after });
+    changes.push({
+      label: buildLabel(path),
+      sectionId: topLevelSectionId(path),
+      sectionLabel: topLevelLabel(path),
+      before,
+      after,
+    });
   }
 }
 

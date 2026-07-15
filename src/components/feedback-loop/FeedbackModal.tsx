@@ -19,6 +19,8 @@ interface FeedbackModalProps {
   round: number;
   error: string | null;
   changes: ResumeFieldChange[];
+  /** Section ids commented in the latest round (drives the "no change" flags). */
+  commentedSectionIds: string[];
   activeTool: { name: string; status: string } | null;
   hasComments: boolean;
   setComment: (sectionId: string, value: string) => void;
@@ -43,6 +45,7 @@ export function FeedbackModal({
   round,
   error,
   changes,
+  commentedSectionIds,
   activeTool,
   hasComments,
   setComment,
@@ -165,7 +168,13 @@ export function FeedbackModal({
               onValidate={handleValidate}
             />
 
-            {round > 0 && <RoundDiffPanel round={round} changes={changes} />}
+            {round > 0 && (
+              <RoundDiffPanel
+                round={round}
+                changes={changes}
+                commentedSectionIds={commentedSectionIds}
+              />
+            )}
           </aside>
 
           <section className="flex min-h-0 flex-1 overflow-hidden p-4">

@@ -84,11 +84,22 @@ src/                      # Renderer (React 19 + react-router-dom)
      still sent to the model. Absent `origin` = visible chat (back-compatible).
    - **Full-screen modal.** `FeedbackModal` fills the window edge-to-edge
      (`inset-0`, full width/height; no `p-4` margin or size cap).
+   - **Section-scoped merge.** After each regeneration `useFeedbackLoop` applies
+     a deterministic merge via the pure `shared/resumeMerge.ts`
+     (`mergeScopedResume`): only the commented sections are taken from the LLM's
+     `updatedResume`; every other section, the whole `basics` block (PII), `meta`,
+     and unknown top-level keys are restored verbatim from the pre-regen resume
+     (`summary` maps ONLY to `basics.summary`). The raw LLM output is never
+     applied directly, so the preview/persisted resume only ever reflects scoped
+     edits regardless of LLM drift.
    - **Per-round diff panel.** After each regeneration `useFeedbackLoop` computes
-     a leaf-field diff via the pure `shared/resumeDiff.ts` (`diffResumes`) and
-     exposes it as `changes`; the collapsible `RoundDiffPanel` renders the
-     before → after values in French. Diff values are displayed IN-MODAL ONLY and
-     never sent into a prompt (PII-safe).
+     a leaf-field diff via the pure `shared/resumeDiff.ts` (`diffResumes`) against
+     the MERGED resume and exposes it as `changes` (each entry carries a
+     structured `sectionId`/`sectionLabel`); the collapsible `RoundDiffPanel`
+     groups them under section headers, renders before → after values in French,
+     and flags any commented section the LLM left unchanged (via
+     `lastRoundCommentedIds`). Diff values are displayed IN-MODAL ONLY and never
+     sent into a prompt (PII-safe).
    - **Unsaved-comments guard.** Closing (X / Escape) or Valider while non-empty
      comments are pending shows the in-app `UnsavedCommentsConfirm` (French, not
      `window.confirm`); cancelling keeps the modal + comments intact.

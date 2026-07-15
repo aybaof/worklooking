@@ -228,6 +228,7 @@ export default function App() {
             round={feedback.round}
             error={feedback.error}
             changes={feedback.changes}
+            commentedSectionIds={feedback.lastRoundCommentedIds}
             activeTool={chat.activeTool}
             hasComments={feedback.hasComments}
             setComment={feedback.setComment}

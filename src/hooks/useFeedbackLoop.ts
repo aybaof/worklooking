@@ -7,6 +7,7 @@ import {
   buildValidationMessage,
 } from "@/../shared/feedbackMessages";
 import { diffResumes, ResumeFieldChange } from "@/../shared/resumeDiff";
+import { mergeScopedResume } from "@/../shared/resumeMerge";
 
 interface UseFeedbackLoopOptions {
   /** Selected theme used for the themed preview render. */
@@ -40,14 +41,18 @@ interface UseFeedbackLoopOptions {
  *
  * - `initialResume` seeds the resume when the modal opens.
  * - `submitComments` compiles the PII-free French message, sends it through the
- *   chat loop, and on success replaces the resume + clears comments (AC-7);
- *   on error preserves comments and unlocks (AC-12).
+ *   chat loop, and on success applies a deterministic section-scoped merge
+ *   (`mergeScopedResume`) — only commented sections come from the LLM, the rest
+ *   (incl. all `basics` PII / `meta` / unknown keys) stay from the pre-regen
+ *   resume — then clears comments (AC-7); on error preserves comments and
+ *   unlocks (AC-12).
  * - `validate` sends the French validation message (triggers
  *   `generate_resume_files`), persists the resume, then closes the modal
  *   exactly once on success; on error the modal stays open and is retryable.
- * - `changes` holds the leaf-field diff between the previous and new resume for
- *   the latest regeneration round (in-modal display only — PII-safe, never sent
- *   into a prompt).
+ * - `changes` holds the leaf-field diff between the previous and the MERGED
+ *   resume for the latest regeneration round (in-modal display only — PII-safe,
+ *   never sent into a prompt). `lastRoundCommentedIds` lists the section ids
+ *   commented this round so the panel can flag LLM no-ops.
  * - No `localStorage` / disk persistence of loop state (AC-11).
  */
 export function useFeedbackLoop({
@@ -65,6 +70,9 @@ export function useFeedbackLoop({
   const [round, setRound] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [changes, setChanges] = useState<ResumeFieldChange[]>([]);
+  const [lastRoundCommentedIds, setLastRoundCommentedIds] = useState<string[]>(
+    [],
+  );
 
   /**
    * The `initialResume` reference already seeded into the loop. Guards the
@@ -84,6 +92,7 @@ export function useFeedbackLoop({
       setRound(0);
       setError(null);
       setChanges([]);
+      setLastRoundCommentedIds([]);
     }
   }, [initialResume]);
 
@@ -143,8 +152,14 @@ export function useFeedbackLoop({
 
   /**
    * Submit the per-section comments: compile the PII-free French message, send
-   * it through the chat loop, and on success replace the resume + clear comments
-   * (AC-7) and advance the round. On error preserve comments and unlock (AC-12).
+   * it through the chat loop, and on success apply a DETERMINISTIC
+   * section-scoped merge (`mergeScopedResume`) so only the commented sections
+   * come from the LLM output — all other sections, all `basics` PII, `meta`, and
+   * unknown keys are restored verbatim from the pre-regen resume. The raw LLM
+   * `updated` is NEVER applied directly. Comments are cleared and the round
+   * advances (AC-7). On error preserve comments and unlock (AC-12). The round
+   * diff is computed against the MERGED resume, and the commented ids of this
+   * round are exposed via `lastRoundCommentedIds` so the panel can flag no-ops.
    */
   const submitComments = useCallback(async () => {
     const toSend = pendingComments();
@@ -152,6 +167,7 @@ export function useFeedbackLoop({
 
     setError(null);
     setChanges([]);
+    setLastRoundCommentedIds([]);
     setIsRegenerating(true);
     try {
       const message = buildRegenerationMessage(toSend);
@@ -161,11 +177,18 @@ export function useFeedbackLoop({
         setError(err);
         return;
       }
-      if (updated) {
-        // Compute the diff BEFORE replacing the resume. Diff values are for
-        // in-modal display only and never flow into a prompt.
-        if (resume) setChanges(diffResumes(resume, updated));
-        setResume(updated);
+      if (updated && resume) {
+        // Apply the scoped merge — never the raw LLM output. Compute the diff
+        // against the merged resume. Merge/diff values are for in-modal display
+        // / local application only and never flow into a prompt.
+        const merged = mergeScopedResume(resume, updated, toSend);
+        setChanges(diffResumes(resume, merged));
+        setResume(merged);
+        setLastRoundCommentedIds(
+          toSend
+            .filter((c) => c.comment.trim().length > 0)
+            .map((c) => c.sectionId),
+        );
       }
       setRound((prev) => prev + 1);
       setComments({});
@@ -211,6 +234,7 @@ export function useFeedbackLoop({
     round,
     error,
     changes,
+    lastRoundCommentedIds,
     hasComments,
     setComment,
     clearComment,

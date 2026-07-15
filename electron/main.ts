@@ -464,6 +464,49 @@ async function readFile({ filePath }: { filePath: string }) {
   }
 }
 
+type ResumeBasics = NonNullable<Resume["basics"]>;
+
+// The exact set of `basics` fields that `GenerateSystemPrompt`
+// (electron/agent/prompt.ts) strips before sending the resume to the model:
+// everything in `basics` EXCEPT `summary` and `label`. These are true PII and
+// must be restored from the source resume after the model responds. `summary`
+// and `label` are deliberately kept in the prompt so the model can tailor them,
+// so they are PRESERVED from the model output — never overwritten by the source.
+// Keep this list in sync with prompt.ts's `sanitizedResume.basics`.
+const BASICS_PII_FIELDS = [
+  "name",
+  "email",
+  "phone",
+  "url",
+  "image",
+  "location",
+  "profiles",
+] as const satisfies ReadonlyArray<keyof ResumeBasics>;
+
+// Restore only the true PII fields from the source resume onto the model's
+// tailored basics, preserving the model-provided `summary` and `label`.
+// - If the model omitted `basics`, seed from the source PII (no `summary`/`label`
+//   to keep) so PII is never dropped.
+// - If the source has no `basics`, leave the model's basics untouched.
+function restoreBasicsPii(
+  sourceBasics: ResumeBasics | undefined,
+  llmBasics: ResumeBasics | undefined,
+): ResumeBasics | undefined {
+  if (!sourceBasics) return llmBasics;
+
+  const merged: ResumeBasics = { ...(llmBasics ?? {}) };
+  for (const field of BASICS_PII_FIELDS) {
+    if (field in sourceBasics) {
+      // Assign the source PII value, preserving the field's type.
+      (merged as Record<string, unknown>)[field] = sourceBasics[field];
+    } else {
+      // Field absent from source: ensure we don't retain a model-provided PII value.
+      delete (merged as Record<string, unknown>)[field];
+    }
+  }
+  return merged;
+}
+
 async function executeTool(
   name: string,
   args: any,
@@ -488,9 +531,15 @@ async function executeTool(
       result = await readFile(args);
       break;
     case "generate_resume_files":
-      // Preserve basics from source resume
+      // Restore ONLY the true PII fields (name/email/phone/url/image/location/
+      // profiles) from the source resume; PRESERVE the model-tailored
+      // `summary`/`label` from the proposal so profile/summary feedback takes
+      // effect in the final HTML+PDF. See restoreBasicsPii / prompt.ts.
       if (sourceResume?.basics && args.resumeJson) {
-        args.resumeJson.basics = { ...sourceResume.basics };
+        args.resumeJson.basics = restoreBasicsPii(
+          sourceResume.basics,
+          args.resumeJson.basics,
+        );
       }
 
       try {
@@ -576,10 +625,16 @@ async function executeTool(
       // writing any file. Setting `updatedResume` (in-memory only) is what opens
       // the feedback modal in the renderer so the user can review + comment
       // before the final `generate_resume_files` write on validation.
-      // Preserve basics from the source resume (PII restored at render time,
-      // consistent with the PII rule — the model never receives PII).
+      // Restore ONLY the true PII fields (name/email/phone/url/image/location/
+      // profiles) from the source resume; PRESERVE the model-tailored
+      // `summary`/`label` from the proposal so a profile/summary comment in the
+      // feedback loop is reflected in the preview/proposal. Consistent with the
+      // final generate_resume_files step. See restoreBasicsPii / prompt.ts.
       if (sourceResume?.basics && args.resumeJson) {
-        args.resumeJson.basics = { ...sourceResume.basics };
+        args.resumeJson.basics = restoreBasicsPii(
+          sourceResume.basics,
+          args.resumeJson.basics,
+        );
       }
       try {
         const html = await renderResume({

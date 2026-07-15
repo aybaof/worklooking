@@ -37,6 +37,9 @@ export function buildRegenerationMessage(comments: SectionComment[]): string {
     "",
     ...lines,
     "",
+    "Modifie UNIQUEMENT les sections listées ci-dessus ; laisse toutes les " +
+      "autres sections et mes informations personnelles strictement inchangées.",
+    "",
     "Renvoie le CV mis à jour.",
   ].join("\n");
 }

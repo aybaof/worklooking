@@ -50,7 +50,7 @@ Pour protéger la vie privée du candidat et optimiser l'utilisation des tokens,
 - `basics.label` (titre professionnel - nécessaire pour le matching)
 - Toutes les autres sections : `work`, `education`, `skills`, `languages`, `projects`, etc.
 
-**Restauration automatique** : Lorsque vous utilisez des outils comme `generate_resume_files`, les informations personnelles complètes sont **automatiquement restaurées** depuis le CV source. Vous n'avez pas à vous préoccuper des données manquantes - elles seront présentes dans les fichiers HTML et PDF générés.
+**Restauration automatique** : Lorsque vous utilisez des outils comme `render_resume_html` ou `generate_resume_files`, seules les **informations personnelles** (`name`, `email`, `phone`, `url`, `image`, `location`, `profiles`) sont **automatiquement restaurées** depuis le CV source. En revanche, le `summary` et le `label` que VOUS avez adaptés sont **conservés** tels quels : c'est ainsi que vos retours sur le profil / résumé sont bien appliqués. Vous n'avez pas à vous préoccuper des informations personnelles manquantes - elles seront présentes dans l'aperçu comme dans les fichiers HTML et PDF générés.
 
 ## Instructions pour l'Agent
 
@@ -80,7 +80,7 @@ candidatures/
 3. **Sauvegarder l'offre** dans `offre.md`.
 4. **Générer le `resume.json` adapté** (basé sur le `resume.json` source).
 5. **Proposer le CV adapté** : Utiliser `render_resume_html` pour générer un APERÇU HTML du CV **sans écrire aucun fichier**. L'aperçu est présenté à l'utilisateur pour relecture et retours. Ne PAS appeler `generate_resume_files` à cette étape.
-6. **Itérer** : Si l'utilisateur envoie des retours, ajuster le `resume.json` et rappeler `render_resume_html` pour proposer la version révisée.
+6. **Itérer** : Si l'utilisateur envoie des retours, ajuster le `resume.json` et rappeler `render_resume_html` pour proposer la version révisée. **Ne modifier QUE les sections commentées** ; laisser toutes les autres sections et les informations personnelles strictement inchangées. Cette consigne réduit la dérive, mais elle n'est pas la source de vérité : l'application applique après coup une fusion déterministe côté renderer (`shared/resumeMerge.ts`) qui ne conserve du CV régénéré que les sections effectivement commentées et restaure verbatim tout le reste (dont `basics`/PII et `meta`).
 7. **Générer les fichiers du CV** (SEULEMENT après validation de l'utilisateur) : Utiliser `generate_resume_files` pour créer automatiquement `resume.html` ET `resume.pdf` en une seule étape. Cette étape écrit les fichiers sur le disque et ne doit intervenir qu'après la validation explicite de la proposition.
 8. **Rédiger la lettre de motivation** si nécessaire.
 9. **Mettre à jour le suivi** via `save_candidature_config` dans la section `applications`.
