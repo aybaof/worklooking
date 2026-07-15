@@ -157,6 +157,160 @@ describe("useFeedbackLoop (modal)", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("Valider closes reliably: onValidated once + onClose exactly once on success (AC-5)", async () => {
+    const finalResume: Resume = { basics: { summary: "Final" } };
+    const send = vi.fn().mockResolvedValue({ resume: finalResume });
+    const onValidated = vi.fn();
+    const onClose = vi.fn();
+    const { result } = renderHook(() =>
+      useFeedbackLoop(
+        makeOptions({ sendFeedbackMessage: send, onValidated, onClose }),
+      ),
+    );
+
+    await act(async () => {
+      await result.current.validate();
+    });
+
+    expect(onValidated).toHaveBeenCalledTimes(1);
+    expect(onValidated).toHaveBeenCalledWith(finalResume);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("Valider falls back to the current resume when validation returns no updatedResume (AC-5)", async () => {
+    // generate_resume_files may return no resume; onValidated must still fire
+    // once with the current resume and onClose exactly once.
+    const send = vi.fn().mockResolvedValue({ resume: null });
+    const onValidated = vi.fn();
+    const onClose = vi.fn();
+    const { result } = renderHook(() =>
+      useFeedbackLoop(
+        makeOptions({ sendFeedbackMessage: send, onValidated, onClose }),
+      ),
+    );
+
+    await act(async () => {
+      await result.current.validate();
+    });
+
+    expect(onValidated).toHaveBeenCalledTimes(1);
+    expect(onValidated).toHaveBeenCalledWith(seedResume);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("Valider error keeps the modal open, sets error, and is retryable (AC-6)", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({ resume: null, error: "provider down" })
+      .mockResolvedValueOnce({ resume: { basics: { summary: "OK" } } });
+    const onValidated = vi.fn();
+    const onClose = vi.fn();
+    const { result } = renderHook(() =>
+      useFeedbackLoop(
+        makeOptions({ sendFeedbackMessage: send, onValidated, onClose }),
+      ),
+    );
+
+    // First validate → error path.
+    await act(async () => {
+      await result.current.validate();
+    });
+    expect(result.current.error).toBe("provider down");
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onValidated).not.toHaveBeenCalled();
+    expect(result.current.isRegenerating).toBe(false);
+
+    // A subsequent validate can be attempted and now succeeds.
+    await act(async () => {
+      await result.current.validate();
+    });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(onValidated).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("a returned updatedResume does NOT reopen/re-seed after a successful validate (AC-7)", async () => {
+    const updatedResume: Resume = {
+      basics: { summary: "Validé et régénéré" },
+    };
+    const send = vi.fn().mockResolvedValue({ resume: updatedResume });
+    const onValidated = vi.fn();
+    const onClose = vi.fn();
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useFeedbackLoop>[0]) => useFeedbackLoop(props),
+      {
+        initialProps: makeOptions({
+          sendFeedbackMessage: send,
+          onValidated,
+          onClose,
+        }),
+      },
+    );
+
+    // Add a comment then validate successfully.
+    act(() => result.current.setComment("work", "un commentaire"));
+    await act(async () => {
+      await result.current.validate();
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    // Simulate the parent NOT changing initialResume (validation's updatedResume
+    // flows to useResume, not back into feedbackResume). The seededRef guard must
+    // prevent any re-seed even if the SAME initialResume reference re-renders.
+    act(() => {
+      rerender(
+        makeOptions({
+          sendFeedbackMessage: send,
+          onValidated,
+          onClose,
+          initialResume: seedResume,
+        }),
+      );
+    });
+
+    // No re-seed happened: still one close, comments not wiped by a phantom
+    // reseed, round unchanged for the closed instance.
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(result.current.comments).toEqual({ work: "un commentaire" });
+    expect(result.current.round).toBe(0);
+  });
+
+  it("populates `changes` from the round diff and never forwards diff values into the prompt (AC-11)", async () => {
+    const updatedResume: Resume = {
+      basics: { summary: "Résumé retravaillé" },
+      work: [{ name: "ACME" }],
+    };
+    const send = vi.fn().mockResolvedValue({ resume: updatedResume });
+    const { result } = renderHook(() =>
+      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
+    );
+
+    act(() => result.current.setComment("work", "Ajoute des détails"));
+    await act(async () => {
+      await result.current.submitComments();
+    });
+
+    // `changes` exposes the leaf diff between the previous and new resume.
+    expect(result.current.changes.length).toBeGreaterThan(0);
+    const summaryChange = result.current.changes.find(
+      (c) => c.label === "Résumé / Profil",
+    );
+    expect(summaryChange?.before).toBe("Profil");
+    expect(summaryChange?.after).toBe("Résumé retravaillé");
+
+    // PII-safety: the message sent through sendFeedbackMessage contains ONLY the
+    // built regeneration message (labels + comments), never any diff VALUE.
+    const sentArg = send.mock.calls[0][0] as string;
+    expect(sentArg).toBe(
+      buildRegenerationMessage([
+        { sectionId: "work", comment: "Ajoute des détails" },
+      ]),
+    );
+    expect(sentArg).not.toContain("Résumé retravaillé");
+    expect(sentArg).not.toContain("Profil");
+  });
+
   it("discards ephemeral comments/round when unmounted and remounted (AC-9)", async () => {
     const send = vi.fn().mockResolvedValue({ resume: { basics: {} } });
     const { result, unmount } = renderHook(() =>

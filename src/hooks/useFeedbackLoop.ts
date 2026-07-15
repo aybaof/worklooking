@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Channels } from "@/../shared/ipc";
 import { Resume } from "@/../shared/resume-types";
 import {
@@ -6,6 +6,7 @@ import {
   buildRegenerationMessage,
   buildValidationMessage,
 } from "@/../shared/feedbackMessages";
+import { diffResumes, ResumeFieldChange } from "@/../shared/resumeDiff";
 
 interface UseFeedbackLoopOptions {
   /** Selected theme used for the themed preview render. */
@@ -42,7 +43,11 @@ interface UseFeedbackLoopOptions {
  *   chat loop, and on success replaces the resume + clears comments (AC-7);
  *   on error preserves comments and unlocks (AC-12).
  * - `validate` sends the French validation message (triggers
- *   `generate_resume_files`), persists the resume, then closes the modal.
+ *   `generate_resume_files`), persists the resume, then closes the modal
+ *   exactly once on success; on error the modal stays open and is retryable.
+ * - `changes` holds the leaf-field diff between the previous and new resume for
+ *   the latest regeneration round (in-modal display only — PII-safe, never sent
+ *   into a prompt).
  * - No `localStorage` / disk persistence of loop state (AC-11).
  */
 export function useFeedbackLoop({
@@ -59,14 +64,26 @@ export function useFeedbackLoop({
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [round, setRound] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [changes, setChanges] = useState<ResumeFieldChange[]>([]);
 
-  // Reseed the loop whenever a new tailored resume opens the modal.
+  /**
+   * The `initialResume` reference already seeded into the loop. Guards the
+   * reseed effect so an `updatedResume` returned by validation (or any other
+   * incidental reference change) can never re-open or re-seed the modal
+   * (AC-7). The modal is unmounted anyway once `onClose` clears `feedbackResume`
+   * to `null` in `App`, so this is defense-in-depth.
+   */
+  const seededRef = useRef<Resume | null>(null);
+
+  // Reseed the loop only when a NEW tailored resume opens the modal.
   useEffect(() => {
-    if (initialResume) {
+    if (initialResume && seededRef.current !== initialResume) {
+      seededRef.current = initialResume;
       setResume(initialResume);
       setComments({});
       setRound(0);
       setError(null);
+      setChanges([]);
     }
   }, [initialResume]);
 
@@ -134,6 +151,7 @@ export function useFeedbackLoop({
     if (toSend.length === 0 || isRegenerating) return;
 
     setError(null);
+    setChanges([]);
     setIsRegenerating(true);
     try {
       const message = buildRegenerationMessage(toSend);
@@ -144,6 +162,9 @@ export function useFeedbackLoop({
         return;
       }
       if (updated) {
+        // Compute the diff BEFORE replacing the resume. Diff values are for
+        // in-modal display only and never flow into a prompt.
+        if (resume) setChanges(diffResumes(resume, updated));
         setResume(updated);
       }
       setRound((prev) => prev + 1);
@@ -153,7 +174,7 @@ export function useFeedbackLoop({
     } finally {
       setIsRegenerating(false);
     }
-  }, [pendingComments, isRegenerating, sendFeedbackMessage]);
+  }, [pendingComments, isRegenerating, sendFeedbackMessage, resume]);
 
   /**
    * Validate: send the French validation message (triggers
@@ -189,6 +210,7 @@ export function useFeedbackLoop({
     isRegenerating,
     round,
     error,
+    changes,
     hasComments,
     setComment,
     clearComment,

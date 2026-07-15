@@ -72,3 +72,26 @@ src/                      # Renderer (React 19 + react-router-dom)
    `useChat.sendFeedbackMessage` (no second `BrowserWindow`, no new IPC channels).
    The validated resume persists via `useResume.setResumeByAi`. This replaced an
    earlier, unreliable second-`BrowserWindow` design. See `docs/ipc.md`.
+
+   UX details of the loop:
+   - **Hidden feedback turns.** Feedback-loop turns (regeneration/validation
+     prompts and their assistant replies) are tagged `origin: "feedback"` on the
+     `Message` type (`shared/chat-types.ts`). `useChat.runTurn(userMessage,
+     origin)` stamps the marker on the user message and the assistant reply
+     (streamed chunks via a `currentTurnOriginRef`, final reply via
+     `response.content`). `ChatPage` filters `origin === "feedback"` messages out
+     of the rendered list, but the FULL history (including flagged turns) is
+     still sent to the model. Absent `origin` = visible chat (back-compatible).
+   - **Full-screen modal.** `FeedbackModal` fills the window edge-to-edge
+     (`inset-0`, full width/height; no `p-4` margin or size cap).
+   - **Per-round diff panel.** After each regeneration `useFeedbackLoop` computes
+     a leaf-field diff via the pure `shared/resumeDiff.ts` (`diffResumes`) and
+     exposes it as `changes`; the collapsible `RoundDiffPanel` renders the
+     before → after values in French. Diff values are displayed IN-MODAL ONLY and
+     never sent into a prompt (PII-safe).
+   - **Unsaved-comments guard.** Closing (X / Escape) or Valider while non-empty
+     comments are pending shows the in-app `UnsavedCommentsConfirm` (French, not
+     `window.confirm`); cancelling keeps the modal + comments intact.
+   - **Reseed guard.** A `seededRef` in `useFeedbackLoop` ensures an
+     `updatedResume` returned by validation cannot re-open/re-seed the closed
+     modal.

@@ -68,7 +68,9 @@ export default function ChatPage({
         ref={scrollRef}
         className="flex-1 overflow-y-auto space-y-4 pr-4 custom-scrollbar"
       >
-        {messages.map((msg, i) => (
+        {messages
+          .filter((msg) => msg.origin !== "feedback")
+          .map((msg, i) => (
           <div
             key={i}
             className={`flex ${

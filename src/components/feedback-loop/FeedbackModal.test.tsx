@@ -35,6 +35,7 @@ function baseProps(overrides: Partial<Parameters<typeof FeedbackModal>[0]> = {})
     isRegenerating: false,
     round: 0,
     error: null,
+    changes: [],
     activeTool: null,
     hasComments: false,
     setComment: vi.fn(),
@@ -158,5 +159,189 @@ describe("FeedbackModal", () => {
       <FeedbackModal {...baseProps({ resume: null })} />,
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it("uses an edge-to-edge overlay with no p-4 margin nor size cap (AC-8)", () => {
+    const { container } = render(<FeedbackModal {...baseProps()} />);
+
+    const overlay = container.firstChild as HTMLElement;
+    const overlayClasses = overlay.className;
+    // Full-viewport overlay, no outer p-4 padding margin.
+    expect(overlayClasses).toContain("fixed");
+    expect(overlayClasses).toContain("inset-0");
+    expect(overlayClasses.split(/\s+/)).not.toContain("p-4");
+
+    // The inner container fills width + height and drops the size cap.
+    const inner = overlay.firstElementChild as HTMLElement;
+    const innerClasses = inner.className.split(/\s+/);
+    expect(innerClasses).toContain("h-full");
+    expect(innerClasses).toContain("w-full");
+    expect(innerClasses).not.toContain("h-[90vh]");
+    expect(innerClasses).not.toContain("w-[95vw]");
+    expect(innerClasses).not.toContain("max-w-6xl");
+
+    // Header, rail and preview remain present (non-overlapping structure).
+    expect(screen.getByText("Retours sur le CV")).not.toBeNull();
+    expect(screen.getByText("Sections du CV")).not.toBeNull();
+  });
+
+  it("shows the collapsible diff panel with labels + before→after after round > 0 (AC-11)", () => {
+    render(
+      <FeedbackModal
+        {...baseProps({
+          round: 1,
+          changes: [
+            {
+              label: "Résumé / Profil",
+              before: "Ancien",
+              after: "Nouveau",
+            },
+          ],
+        })}
+      />,
+    );
+
+    const panel = screen.getByTestId("round-diff-panel");
+    expect(panel).not.toBeNull();
+    expect(within(panel).getByText("Résumé / Profil")).not.toBeNull();
+    expect(within(panel).getByText("Ancien")).not.toBeNull();
+    expect(within(panel).getByText("Nouveau")).not.toBeNull();
+  });
+
+  it("shows the French 'no changes' message when the round produced no diff (AC-11)", () => {
+    render(<FeedbackModal {...baseProps({ round: 1, changes: [] })} />);
+
+    const panel = screen.getByTestId("round-diff-panel");
+    expect(
+      within(panel).getByText(/Aucune modification détectée pour ce tour/),
+    ).not.toBeNull();
+  });
+
+  it("does not show the diff panel before any regeneration round (AC-11)", () => {
+    render(<FeedbackModal {...baseProps({ round: 0 })} />);
+    expect(screen.queryByTestId("round-diff-panel")).toBeNull();
+  });
+
+  it("prompts before closing (X) when there are pending comments; confirm closes (AC-12/AC-14)", () => {
+    const onClose = vi.fn();
+    render(
+      <FeedbackModal {...baseProps({ hasComments: true, onClose })} />,
+    );
+
+    // No confirmation yet.
+    expect(screen.queryByTestId("unsaved-comments-confirm")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
+
+    // In-app confirmation (NOT window.confirm) appears; onClose not yet called.
+    const confirm = screen.getByTestId("unsaved-comments-confirm");
+    expect(confirm).not.toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+
+    // Confirming closes.
+    fireEvent.click(
+      within(confirm).getByRole("button", { name: /Fermer quand même/ }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("prompts before closing on Escape when there are pending comments (AC-12)", () => {
+    const onClose = vi.fn();
+    render(<FeedbackModal {...baseProps({ hasComments: true, onClose })} />);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.getByTestId("unsaved-comments-confirm")).not.toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("cancelling the close guard keeps the modal open and comments intact (AC-12)", () => {
+    const onClose = vi.fn();
+    const setComment = vi.fn();
+    const clearComment = vi.fn();
+    render(
+      <FeedbackModal
+        {...baseProps({
+          hasComments: true,
+          comments: { work: "mon commentaire" },
+          onClose,
+          setComment,
+          clearComment,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
+    const confirm = screen.getByTestId("unsaved-comments-confirm");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Annuler" }));
+
+    // Modal stays open, onClose not called, comments untouched (no clear).
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("unsaved-comments-confirm")).toBeNull();
+    expect(screen.getByText("Retours sur le CV")).not.toBeNull();
+    expect(clearComment).not.toHaveBeenCalled();
+  });
+
+  it("closes immediately (no confirmation) when there are no pending comments (AC-12)", () => {
+    const onClose = vi.fn();
+    render(<FeedbackModal {...baseProps({ hasComments: false, onClose })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
+
+    expect(screen.queryByTestId("unsaved-comments-confirm")).toBeNull();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("prompts before Valider when there are pending comments; confirm validates (AC-13)", () => {
+    const validate = vi.fn();
+    render(<FeedbackModal {...baseProps({ hasComments: true, validate })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Valider/ }));
+
+    const confirm = screen.getByTestId("unsaved-comments-confirm");
+    expect(confirm).not.toBeNull();
+    // Not validated until confirmed.
+    expect(validate).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(confirm).getByRole("button", { name: /Valider quand même/ }),
+    );
+    expect(validate).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancelling the Valider guard aborts validation and keeps comments (AC-13)", () => {
+    const validate = vi.fn();
+    render(<FeedbackModal {...baseProps({ hasComments: true, validate })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Valider/ }));
+    const confirm = screen.getByTestId("unsaved-comments-confirm");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Annuler" }));
+
+    expect(validate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("unsaved-comments-confirm")).toBeNull();
+  });
+
+  it("validates immediately (no confirmation) when there are no pending comments (AC-13)", () => {
+    const validate = vi.fn();
+    render(<FeedbackModal {...baseProps({ hasComments: false, validate })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Valider/ }));
+
+    expect(screen.queryByTestId("unsaved-comments-confirm")).toBeNull();
+    expect(validate).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses an in-app confirmation element, not window.confirm (AC-14)", () => {
+    const confirmSpy = vi.spyOn(window, "confirm");
+    render(<FeedbackModal {...baseProps({ hasComments: true })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
+
+    // The confirmation is a DOM element with role=alertdialog, and the native
+    // window.confirm was never invoked.
+    const confirm = screen.getByTestId("unsaved-comments-confirm");
+    expect(confirm.getAttribute("role")).toBe("alertdialog");
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 });

@@ -10,14 +10,14 @@
 
 | Hook | Responsibility |
 | ---- | -------------- |
-| `useChat` | Message history, typing state, AI stream handling. Owns the authoritative feedback-loop conversation; exposes `sendFeedbackMessage` (continues the same conversation for regeneration/validation) and `onTailoredResume` (opens the feedback modal when `ai:chat` returns `updatedResume`) |
+| `useChat` | Message history, typing state, AI stream handling. Owns the authoritative feedback-loop conversation; exposes `sendFeedbackMessage` (continues the same conversation for regeneration/validation) and `onTailoredResume` (opens the feedback modal when `ai:chat` returns `updatedResume`). `runTurn(userMessage, origin)` tags each turn with a `Message.origin` marker; feedback turns are stamped `"feedback"` (user + assistant reply, streamed chunks via a `currentTurnOriginRef`) so `ChatPage` can hide them while the full history is still sent to the model |
 | `useSettings` | API key, provider preset, base URL, model, custom wire protocol, user data path |
 | `useResume` | Load/save/update resume JSON |
 | `useCandidatureConfig` | Job application criteria and history |
 | `useOnboarding` | First-run onboarding flow |
 | `useTemplateSelection` | Selected resume theme |
 | `useTheme` | App UI appearance mode (light/dark/system), `.dark` class + OS `matchMedia` subscription |
-| `useFeedbackLoop` | CV feedback loop **as an in-app modal in the main window** (single-window design): holds the current tailored resume, draft per-section comments, round, and themed preview. Drives regeneration/validation by continuing the SAME conversation via `useChat.sendFeedbackMessage` — never calls `ai:chat` directly. The conversation history lives in `useChat`; the hook holds only ephemeral loop state (comments/round/preview) |
+| `useFeedbackLoop` | CV feedback loop **as an in-app modal in the main window** (single-window design): holds the current tailored resume, draft per-section comments, round, themed preview, and the per-round leaf-field diff (`changes`, computed via the pure `shared/resumeDiff.ts` for in-modal display only — never sent into a prompt). Drives regeneration/validation by continuing the SAME conversation via `useChat.sendFeedbackMessage` — never calls `ai:chat` directly. A `seededRef` guards the reseed effect so a validation-returned `updatedResume` cannot re-open/re-seed the closed modal. The conversation history lives in `useChat`; the hook holds only ephemeral loop state (comments/round/preview/changes) |
 
 ## Persistence
 

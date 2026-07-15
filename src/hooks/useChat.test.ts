@@ -89,9 +89,13 @@ describe("useChat", () => {
     emit(Channels.CHAT_UPDATE, { content: "assistant reply" });
 
     const msgs = result.current.messages;
+    // A free-form chat turn is in flight, so the streamed assistant message the
+    // CHAT_UPDATE listener creates inherits the turn origin ("chat") via
+    // currentTurnOriginRef (AC-1 default: free-form chat stays "chat").
     expect(msgs[msgs.length - 1]).toEqual({
       role: "assistant",
       content: "assistant reply",
+      origin: "chat",
     });
   });
 
@@ -240,7 +244,13 @@ describe("useChat", () => {
       .messages;
     expect(sent.length).toBeGreaterThan(historyBefore);
     const lastSent = sent[sent.length - 1];
-    expect(lastSent).toEqual({ role: "user", content: "- Compétences : ..." });
+    // AC-1: the feedback user message is stamped with origin "feedback".
+    // AC-3: it is STILL part of the history sent to the model (not stripped).
+    expect(lastSent).toEqual({
+      role: "user",
+      content: "- Compétences : ...",
+      origin: "feedback",
+    });
 
     // The message history now includes the appended feedback user turn.
     expect(
@@ -248,6 +258,83 @@ describe("useChat", () => {
         (m) => m.role === "user" && m.content === "- Compétences : ...",
       ),
     ).toBe(true);
+  });
+
+  it("flags both the feedback user message AND its assistant reply with origin 'feedback' (AC-1)", async () => {
+    api.invoke.mockResolvedValueOnce({ content: "CV régénéré" });
+
+    const { result } = renderHook(() => useChat(baseOptions()));
+
+    await act(async () => {
+      await result.current.sendFeedbackMessage("- Résumé : plus court");
+    });
+
+    const feedbackUser = result.current.messages.find(
+      (m) => m.role === "user" && m.content === "- Résumé : plus court",
+    );
+    expect(feedbackUser?.origin).toBe("feedback");
+
+    // The assistant reply produced by that feedback turn (from response.content)
+    // is flagged too, so the whole turn is hidden from the rendered chat.
+    const assistantReply = result.current.messages.find(
+      (m) => m.role === "assistant" && m.content === "CV régénéré",
+    );
+    expect(assistantReply?.origin).toBe("feedback");
+  });
+
+  it("keeps free-form chat turns unflagged (origin undefined) so they stay visible (AC-4)", async () => {
+    const onTailoredResume = vi.fn();
+    const updatedResume: Resume = { basics: { name: "Tailored" } };
+    api.invoke.mockResolvedValue({ content: "réponse visible", updatedResume });
+
+    const { result } = renderHook(() =>
+      useChat(baseOptions({ onTailoredResume })),
+    );
+    act(() => result.current.setInput("adapte mon CV"));
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    const userMsg = result.current.messages.find(
+      (m) => m.role === "user" && m.content === "adapte mon CV",
+    );
+    // Free-form chat messages remain unflagged (origin "chat", not "feedback").
+    expect(userMsg?.origin).not.toBe("feedback");
+
+    const assistantMsg = result.current.messages.find(
+      (m) => m.role === "assistant" && m.content?.includes("réponse visible"),
+    );
+    expect(assistantMsg?.origin).not.toBe("feedback");
+
+    // onTailoredResume still fires on a returned tailored resume.
+    expect(onTailoredResume).toHaveBeenCalledWith(updatedResume);
+  });
+
+  it("stamps streamed CHAT_UPDATE chunks of an in-flight feedback turn with origin 'feedback' (AC-1 streaming)", async () => {
+    // invoke never resolves so the feedback turn stays in-flight; the streamed
+    // assistant chunk arrives via CHAT_UPDATE and must inherit "feedback".
+    api.invoke.mockImplementation(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useChat(baseOptions()));
+
+    act(() => {
+      void result.current.sendFeedbackMessage("- Compétences : ajoute React");
+    });
+
+    // Wait until the feedback user message is appended (turn in flight).
+    await waitFor(() =>
+      expect(
+        result.current.messages[result.current.messages.length - 1].role,
+      ).toBe("user"),
+    );
+
+    emit(Channels.CHAT_UPDATE, { content: "morceau diffusé" });
+
+    const streamed = result.current.messages.find(
+      (m) => m.role === "assistant" && m.content === "morceau diffusé",
+    );
+    expect(streamed?.origin).toBe("feedback");
   });
 
   it("sendFeedbackMessage surfaces errors without throwing (AC-4/AC-12 support)", async () => {

@@ -227,6 +227,7 @@ export default function App() {
             isRegenerating={feedback.isRegenerating}
             round={feedback.round}
             error={feedback.error}
+            changes={feedback.changes}
             activeTool={chat.activeTool}
             hasComments={feedback.hasComments}
             setComment={feedback.setComment}

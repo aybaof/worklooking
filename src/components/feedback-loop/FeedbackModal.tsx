@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Resume } from "@/../shared/resume-types";
+import { ResumeFieldChange } from "@/../shared/resumeDiff";
 import { PreviewFrame } from "@/components/feedback-loop/PreviewFrame";
 import { SectionPinRail } from "@/components/feedback-loop/SectionPinRail";
 import { CommentPopover } from "@/components/feedback-loop/CommentPopover";
 import { RegenControls } from "@/components/feedback-loop/RegenControls";
+import { RoundDiffPanel } from "@/components/feedback-loop/RoundDiffPanel";
+import { UnsavedCommentsConfirm } from "@/components/feedback-loop/UnsavedCommentsConfirm";
 
 interface FeedbackModalProps {
   resume: Resume | null;
@@ -15,6 +18,7 @@ interface FeedbackModalProps {
   isRegenerating: boolean;
   round: number;
   error: string | null;
+  changes: ResumeFieldChange[];
   activeTool: { name: string; status: string } | null;
   hasComments: boolean;
   setComment: (sectionId: string, value: string) => void;
@@ -38,6 +42,7 @@ export function FeedbackModal({
   isRegenerating,
   round,
   error,
+  changes,
   activeTool,
   hasComments,
   setComment,
@@ -47,17 +52,53 @@ export function FeedbackModal({
   onClose,
 }: FeedbackModalProps) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  // Which action, if any, is awaiting unsaved-comments confirmation.
+  const [confirm, setConfirm] = useState<null | "close" | "validate">(null);
 
-  // Close on Escape (unless a regeneration is in flight).
+  // Close on Escape (unless a regeneration is in flight). When there are
+  // pending comments, prompt first instead of closing immediately.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isRegenerating) onClose();
+      if (e.key !== "Escape" || isRegenerating) return;
+      if (hasComments) {
+        setConfirm("close");
+      } else {
+        onClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isRegenerating, onClose]);
+  }, [isRegenerating, onClose, hasComments]);
 
   if (!resume) return null;
+
+  // Guarded close: prompt when there are unsaved comments, else close now.
+  const requestClose = () => {
+    if (hasComments) {
+      setConfirm("close");
+    } else {
+      onClose();
+    }
+  };
+
+  // Guarded validate: prompt when there are unsaved comments, else validate now.
+  const handleValidate = () => {
+    if (hasComments) {
+      setConfirm("validate");
+    } else {
+      validate();
+    }
+  };
+
+  const handleConfirm = () => {
+    const mode = confirm;
+    setConfirm(null);
+    if (mode === "close") {
+      onClose();
+    } else if (mode === "validate") {
+      validate();
+    }
+  };
 
   const handlePinClick = (sectionId: string) => {
     setActiveSectionId((prev) => (prev === sectionId ? null : sectionId));
@@ -73,8 +114,8 @@ export function FeedbackModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex h-[90vh] w-[95vw] max-w-6xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+    <div className="fixed inset-0 z-50 flex bg-black/50">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-background">
         <header className="flex shrink-0 items-center justify-between border-b px-5 py-3">
           <div>
             <h2 className="text-lg font-semibold">Retours sur le CV</h2>
@@ -86,7 +127,7 @@ export function FeedbackModal({
           <Button
             size="icon"
             variant="ghost"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isRegenerating}
             aria-label="Fermer"
           >
@@ -121,15 +162,25 @@ export function FeedbackModal({
               error={error}
               activeTool={activeTool}
               onRegenerate={submitComments}
-              onValidate={validate}
+              onValidate={handleValidate}
             />
+
+            {round > 0 && <RoundDiffPanel round={round} changes={changes} />}
           </aside>
 
-          <section className="flex-1 overflow-hidden p-4">
+          <section className="flex min-h-0 flex-1 overflow-hidden p-4">
             <PreviewFrame html={previewHtml} isLoading={isPreviewLoading} />
           </section>
         </div>
       </div>
+
+      {confirm !== null && (
+        <UnsavedCommentsConfirm
+          mode={confirm}
+          onConfirm={handleConfirm}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </div>
   );
 }
