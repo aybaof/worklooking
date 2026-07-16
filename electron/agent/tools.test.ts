@@ -1,7 +1,7 @@
 /**
  * Tier 2 — contract parity between the declared tools and their dispatcher.
  *
- * The 7 tool names declared in tools.ts MUST match the switch cases handled by
+ * The 8 tool names declared in tools.ts MUST match the switch cases handled by
  * `executeTool` in main.ts. If they drift, the agent advertises a tool it can't
  * run (or vice-versa). Rather than importing main.ts (which pulls in the whole
  * Electron main process), we parse the `executeTool` switch cases out of the
@@ -20,6 +20,7 @@ const EXPECTED_TOOL_NAMES = [
   "save_candidature_config",
   "write_file",
   "generate_resume_files",
+  "render_resume_html",
   "fetch_url",
   "save_source_resume",
   "read_pdf",
@@ -52,7 +53,7 @@ function toolName(t: OpenAI.Chat.ChatCompletionTool): string {
 }
 
 describe("agent tools contract", () => {
-  it("declares exactly the expected 7 tools by name", () => {
+  it("declares exactly the expected 8 tools by name", () => {
     const names = tools.map(toolName).sort();
     expect(names).toEqual(EXPECTED_TOOL_NAMES);
   });
@@ -83,5 +84,20 @@ describe("agent tools contract", () => {
       expect(params?.type).toBe("object");
       expect(params?.properties).toBeTypeOf("object");
     }
+  });
+
+  it("render_resume_html requires company and position string params (AC-1)", () => {
+    const tool = tools.find((t) => toolName(t) === "render_resume_html");
+    expect(tool?.type).toBe("function");
+    if (tool?.type !== "function") return;
+    const params = tool.function.parameters as {
+      properties?: Record<string, { type?: string }>;
+      required?: string[];
+    };
+    expect(params.required).toEqual(
+      expect.arrayContaining(["resumeJson", "company", "position"]),
+    );
+    expect(params.properties?.company?.type).toBe("string");
+    expect(params.properties?.position?.type).toBe("string");
   });
 });

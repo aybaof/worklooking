@@ -86,6 +86,34 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "render_resume_html",
+      description:
+        "Génère un APERÇU HTML d'une proposition de CV adapté SANS écrire aucun fichier. À utiliser pour PROPOSER un CV adapté à une offre pendant la conversation : l'aperçu est présenté à l'utilisateur afin qu'il puisse le relire et donner ses retours AVANT la génération finale. Appelle cet outil pour proposer le CV adapté ; n'utilise 'generate_resume_files' (qui écrit les fichiers HTML et PDF) qu'après validation explicite de l'utilisateur. Fournis TOUJOURS 'company' et 'position' d'après le contexte de l'offre d'emploi : ils servent à nommer automatiquement le dossier de candidature au moment de la validation.",
+      parameters: {
+        type: "object",
+        properties: {
+          resumeJson: {
+            type: "object",
+            description: "Le contenu du CV au format JSON Resume.",
+          },
+          company: {
+            type: "string",
+            description:
+              "Nom de l'entreprise ciblée par cette offre (ex: Doctolib).",
+          },
+          position: {
+            type: "string",
+            description:
+              "Intitulé du poste ciblé par cette offre (ex: Développeur Fullstack).",
+          },
+        },
+        required: ["resumeJson", "company", "position"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "fetch_url",
       description:
         "Récupère le contenu texte d'une URL (offre d'emploi, site entreprise). Utilise une session persistante pour préserver les cookies entre les appels. Si l'URL nécessite une authentification, la fonction retournera needsAuth: true avec un message d'erreur.",

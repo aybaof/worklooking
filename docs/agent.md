@@ -13,7 +13,7 @@
 | `tools.ts` | OpenAI function-tool definitions the agent can call. |
 | `aiClient.ts` | `AiClientRouter` — provider adapters (OpenAI Chat Completions + Anthropic Messages) behind one interface; runs the chat/tool loop and connection tests. |
 
-The tools are executed by `executeTool()` in `electron/main.ts` (~L535). The chat loop
+The tools are executed by `executeTool()` in `electron/main.ts` (~L714). The chat loop
 itself is driven by `AiClientRouter` (`aiClient.ts`), which `main.ts` calls from the
 `ai:chat` handler and passes a `runTool` callback into. See `docs/ipc.md`.
 
@@ -23,20 +23,41 @@ the unit tests): `normalizeAnthropicBaseURL`, `isAzureEndpoint`, and
 
 ## Tools (`electron/agent/tools.ts`)
 
-Exactly 7 tools are defined, each with a **French** description:
+Exactly 8 tools are defined, each with a **French** description:
 
 | Tool | Purpose |
 | ---- | ------- |
 | `read_file` | Read a local file (relative or absolute path). |
 | `write_file` | Create/update a file in the user data dir (auto-creates parent dirs). |
 | `save_candidature_config` | Persist the full `CandidatureConfig` (profile/tracking). |
-| `generate_resume_files` | Render resume JSON → HTML + PDF at given paths. |
+| `render_resume_html` | **Propose** a tailored CV: render resume JSON → HTML **without writing any file**. Requires `company`/`position` (non-PII strings from the job-offer context) alongside `resumeJson` — they name the candidature folder automatically when the user later validates. Returns only a size/summary (not the full HTML) and sets `updatedResume` in-memory, which opens the feedback modal. The pre-validation proposal step. |
+| `generate_resume_files` | Render resume JSON → HTML + PDF at given paths (write-only). The final step, called only after the user validates. Does **not** set `updatedResume`. |
 | `save_source_resume` | Save the main source resume (base CV only). |
 | `fetch_url` | Fetch text content of a URL (persistent session; may return `needsAuth`). |
 | `read_pdf` | Extract text from a PDF (absolute path). |
 
 Each has a matching `case` in `executeTool()` (`electron/main.ts`) — the switch handles
-these exact 7 names and no others.
+these exact 8 names and no others.
+
+### Resume-tailoring flow
+
+The tailoring loop is a purely conversational, ephemeral proposal step — nothing is
+written to disk until the user validates:
+
+1. The agent **proposes** the tailored CV by calling `render_resume_html` (now with
+   required `company`/`position`, in addition to `resumeJson`), which renders the HTML
+   preview **without writing any file** and sets `updatedResume` (in-memory). The
+   `company`/`position` values flow back to the renderer via `ai:chat`'s response.
+2. `ai:chat` returns that `updatedResume` (+ `company`/`position`), which opens the
+   in-app **feedback modal** where the user reviews the proposal and can leave
+   per-section comments (regeneration rounds re-call `render_resume_html`, still
+   write-free).
+3. On **Valider**, the app writes the final HTML + PDF **deterministically** —
+   directly from the renderer via the `resume:generate-final` IPC channel, with
+   NO LLM involvement — using the `company`/`position` captured in step 1/2 to
+   name the candidature folder; the resume is then persisted. `generate_resume_files`
+   remains available and unchanged for OTHER, non-Valider "generate files" requests a
+   user may make in free-form chat. See `docs/ipc.md` → "CV feedback loop".
 
 ## Adding an agent tool (workflow)
 
@@ -52,6 +73,15 @@ these exact 7 names and no others.
 
 `prompt.ts` (`GenerateSystemPrompt`) rebuilds `basics` to keep **only** `summary` and
 `label`, dropping every other `basics` field (name, email, phone, url, image, location,
-profiles, …) from the LLM context. Full personal data is **restored automatically** when
-tools like `generate_resume_files` run, so generated HTML/PDF contain complete data. Don't
-re-add PII to the prompt.
+profiles) from the LLM context. Don't re-add PII to the prompt.
+
+**Restore after the model responds.** When `render_resume_html` (proposal/preview) and
+`generate_resume_files` (final write) run, `restoreBasicsPii()` (in `electron/main.ts`,
+list kept in sync with `prompt.ts`) restores **only the true PII fields** —
+`name`, `email`, `phone`, `url`, `image`, `location`, `profiles` — from the source resume.
+It **preserves** the model-tailored `summary` and `label` from the proposal (these are the
+two fields intentionally kept in the model context so they can be adapted). This is why a
+profile/summary comment in the feedback loop now takes effect: the tailored
+`basics.summary`/`basics.label` are no longer reverted to the source. The same restore
+logic runs in both tools so the preview and the final HTML/PDF stay consistent. Note the
+restore only affects what the model receives *back*; the model still never *receives* PII.

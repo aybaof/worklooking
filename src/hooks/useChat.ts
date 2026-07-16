@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Channels } from "@/../shared/ipc";
 import {
   Message,
+  MessageOrigin,
   ChatUpdatePayload,
   ToolStatusPayload,
 } from "@/../shared/chat-types";
@@ -17,8 +18,19 @@ interface UseChatOptions {
   resume: Resume;
   candidature: CandidatureConfig;
   selectedTheme?: string;
-  onResumeUpdate: (resume: Resume) => void;
   onCandidatureUpdate: (config: CandidatureConfig) => void;
+  /**
+   * Called when a tailoring turn returns an `updatedResume`. The main renderer
+   * uses this to open the in-app CV feedback modal (single-window design — the
+   * loop runs here, not in a second BrowserWindow). `company`/`position` (when
+   * the model supplied them to `render_resume_html`) are forwarded so
+   * `useFeedbackLoop` can seed the deterministic Valider write with them.
+   */
+  onTailoredResume?: (
+    resume: Resume,
+    company?: string,
+    position?: string,
+  ) => void;
 }
 
 export function useChat({
@@ -29,8 +41,8 @@ export function useChat({
   resume,
   candidature,
   selectedTheme,
-  onResumeUpdate,
   onCandidatureUpdate,
+  onTailoredResume,
 }: UseChatOptions) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -46,6 +58,15 @@ export function useChat({
     status: string;
   } | null>(null);
 
+  /**
+   * Origin of the turn currently in flight. Read synchronously by the
+   * `CHAT_UPDATE` streaming listener (a `[]`-deps effect with no access to
+   * `runTurn`'s closure) so newly-created assistant messages inherit the right
+   * origin. A ref (not state) is deliberate: the listener must read the latest
+   * value without a re-subscribe.
+   */
+  const currentTurnOriginRef = useRef<MessageOrigin>("chat");
+
   useEffect(() => {
     const onChatUpdate = (data: ChatUpdatePayload) => {
       setMessages((prev) => {
@@ -59,7 +80,14 @@ export function useChat({
             },
           ];
         }
-        return [...prev, { role: "assistant", content: data.content }];
+        return [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.content,
+            origin: currentTurnOriginRef.current,
+          },
+        ];
       });
     };
 
@@ -80,20 +108,34 @@ export function useChat({
     };
   }, []);
 
-  const handleSend = useCallback(
-    async (attachmentPath?: string) => {
-      if (!input.trim() || !apiKey) return;
-
-      let messageContent = input;
-      if (attachmentPath) {
-        messageContent += `\n\n[Pièce jointe: ${attachmentPath}]`;
-      }
-
-      const userMessage: Message = { role: "user", content: messageContent };
-      const updatedMessages = [...messages, userMessage];
-
+  /**
+   * Run one chat turn: append `userMessage`, invoke `ai:chat` continuing the
+   * CURRENT conversation history, stream the assistant reply back into
+   * `messages`, and apply resume/config updates. Returns the tailored
+   * `updatedResume` (if any), plus any `company`/`position` the model supplied
+   * to `render_resume_html`, so callers can react (e.g. open the feedback
+   * modal). Shared by free-form chat (`handleSend`) and the feedback loop
+   * (`sendFeedbackMessage`) so there is a single turn implementation.
+   *
+   * `origin` marks the turn: `"chat"` (default) for visible free-form chat,
+   * `"feedback"` for hidden CV feedback-loop turns. It is stamped on the
+   * appended user message and the assistant reply (both the streamed chunks —
+   * via `currentTurnOriginRef` — and the final `response.content`), so the
+   * whole turn is filtered out of the rendered chat while STILL being sent to
+   * the model as history.
+   */
+  const runTurn = useCallback(
+    async (
+      userMessage: Message,
+      origin: MessageOrigin = "chat",
+    ): Promise<{
+      resume: Resume | null;
+      company?: string;
+      position?: string;
+    }> => {
+      currentTurnOriginRef.current = origin;
+      const updatedMessages = [...messages, { ...userMessage, origin }];
       setMessages(updatedMessages);
-      setInput("");
       setIsTyping(true);
 
       try {
@@ -110,10 +152,6 @@ export function useChat({
 
         if (response.error) {
           throw new Error(response.error);
-        }
-
-        if (response.updatedResume) {
-          onResumeUpdate(response.updatedResume);
         }
 
         if (response.updatedConfig) {
@@ -134,22 +172,22 @@ export function useChat({
             }
             return [
               ...prev,
-              { role: "assistant", content: response.content || "" },
+              { role: "assistant", content: response.content || "", origin },
             ];
           });
         }
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: `Erreur: ${message}.` },
-        ]);
+
+        return {
+          resume: response.updatedResume ?? null,
+          company: response.company,
+          position: response.position,
+        };
       } finally {
         setIsTyping(false);
+        currentTurnOriginRef.current = "chat";
       }
     },
     [
-      input,
       apiKey,
       baseURL,
       api,
@@ -158,9 +196,76 @@ export function useChat({
       resume,
       candidature,
       selectedTheme,
-      onResumeUpdate,
       onCandidatureUpdate,
     ],
+  );
+
+  const handleSend = useCallback(
+    async (attachmentPath?: string) => {
+      if (!input.trim() || !apiKey) return;
+
+      let messageContent = input;
+      if (attachmentPath) {
+        messageContent += `\n\n[Pièce jointe: ${attachmentPath}]`;
+      }
+
+      const userMessage: Message = { role: "user", content: messageContent };
+      setInput("");
+
+      try {
+        const { resume: tailored, company, position } =
+          await runTurn(userMessage);
+        if (tailored) {
+          // Open the feedback modal so the user can iterate on the proposal.
+          // The proposal comes from the write-free `render_resume_html` tool and
+          // is PURELY EPHEMERAL — nothing is persisted here. Persistence happens
+          // only when the user clicks Valider (`useFeedbackLoop.validate`),
+          // which now writes deterministically via `resume:generate-final`.
+          onTailoredResume?.(tailored, company, position);
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Erreur: ${message}.` },
+        ]);
+      }
+    },
+    [input, apiKey, runTurn, onTailoredResume],
+  );
+
+  /**
+   * Continue the SAME conversation with a feedback-loop message (regeneration
+   * or validation). Returns the new tailored resume or an error string so the
+   * feedback modal can update its preview / surface the error while preserving
+   * the user's comments.
+   */
+  const sendFeedbackMessage = useCallback(
+    async (
+      content: string,
+    ): Promise<{
+      resume: Resume | null;
+      error?: string;
+      company?: string;
+      position?: string;
+    }> => {
+      const userMessage: Message = { role: "user", content };
+      try {
+        const { resume, company, position } = await runTurn(
+          userMessage,
+          "feedback",
+        );
+        return { resume, company, position };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Erreur: ${message}.` },
+        ]);
+        return { resume: null, error: message };
+      }
+    },
+    [runTurn],
   );
 
   return {
@@ -171,5 +276,6 @@ export function useChat({
     isTyping,
     activeTool,
     handleSend,
+    sendFeedbackMessage,
   };
 }

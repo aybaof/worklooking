@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Settings, Bot, FileText, Target } from "lucide-react";
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
@@ -9,12 +9,15 @@ import ResumeEditorPage from "./pages/resume-editor";
 import CandidatureEditorPage from "./pages/candidature-editor";
 import { useSettings } from "@/hooks/useSettings";
 import { useChat } from "@/hooks/useChat";
+import { useFeedbackLoop } from "@/hooks/useFeedbackLoop";
+import { FeedbackModal } from "@/components/feedback-loop/FeedbackModal";
 import { GuidanceManager } from "@/components/onboarding/GuidanceManager";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useResume } from "./hooks/useResume";
 import { useCandidatureConfig } from "./hooks/useCandidatureConfig";
 import { useTemplateSelection } from "./hooks/useTemplateSelection";
 import { useTheme } from "./hooks/useTheme";
+import { Resume } from "@/../shared/resume-types";
 
 const pageVariants = {
   initial: {
@@ -38,6 +41,22 @@ export default function App() {
   const templateSelection = useTemplateSelection();
   const theme = useTheme();
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+
+  // The tailored resume that opened the in-app feedback modal (single-window
+  // design — the loop runs here, not in a second BrowserWindow). `null` = closed.
+  const [feedbackResume, setFeedbackResume] = useState<Resume | null>(null);
+  // Company/position captured from the SAME `render_resume_html` call that
+  // produced `feedbackResume` (when the model supplied them) — threaded into
+  // `useFeedbackLoop` so Valider can name the candidature folder.
+  const [feedbackCompany, setFeedbackCompany] = useState<string | undefined>(
+    undefined,
+  );
+  const [feedbackPosition, setFeedbackPosition] = useState<
+    string | undefined
+  >(undefined);
+
   const chat = useChat({
     apiKey: settings.apiKey,
     selectedModel: settings.selectedModel,
@@ -46,12 +65,25 @@ export default function App() {
     resume: resume.resume,
     candidature: candidature.config,
     selectedTheme: templateSelection.selectedTheme,
-    onResumeUpdate: resume.setResumeByAi,
     onCandidatureUpdate: candidature.setCandidatureByAi,
+    onTailoredResume: (tailored, company, position) => {
+      setFeedbackResume(tailored);
+      setFeedbackCompany(company);
+      setFeedbackPosition(position);
+    },
   });
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const location = useLocation();
+  const feedback = useFeedbackLoop({
+    defaultTheme: templateSelection.selectedTheme,
+    initialResume: feedbackResume,
+    initialCompany: feedbackCompany,
+    initialPosition: feedbackPosition,
+    sendFeedbackMessage: chat.sendFeedbackMessage,
+    renderPreview: templateSelection.renderPreview,
+    onValidated: resume.setResumeByAi,
+    onThemeValidated: templateSelection.setSelectedTheme,
+    onClose: () => setFeedbackResume(null),
+  });
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
@@ -201,6 +233,35 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {feedbackResume && (
+        <ErrorBoundary>
+          <FeedbackModal
+            resume={feedback.resume}
+            comments={feedback.comments}
+            previewHtml={feedback.previewHtml}
+            isPreviewLoading={feedback.isPreviewLoading}
+            isRegenerating={feedback.isRegenerating}
+            round={feedback.round}
+            error={feedback.error}
+            changes={feedback.changes}
+            commentedSectionIds={feedback.lastRoundCommentedIds}
+            activeTool={chat.activeTool}
+            hasComments={feedback.hasComments}
+            selectedTheme={feedback.selectedTheme}
+            availableThemes={templateSelection.availableThemes}
+            onSelectTheme={feedback.setSelectedTheme}
+            renderThemePreview={templateSelection.renderPreview}
+            setComment={feedback.setComment}
+            clearComment={feedback.clearComment}
+            submitComments={feedback.submitComments}
+            validate={feedback.validate}
+            validationResult={feedback.validationResult}
+            onRevealInFolder={feedback.revealInFolder}
+            onClose={feedback.close}
+          />
+        </ErrorBoundary>
+      )}
     </div>
   );
 }

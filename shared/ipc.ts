@@ -25,6 +25,10 @@ export const Channels = {
 
   // Resume operations
   RESUME_RENDER_PREVIEW: "resume:render-preview",
+  RESUME_GENERATE_FINAL: "resume:generate-final",
+
+  // Shell operations
+  SHELL_SHOW_ITEM_IN_FOLDER: "shell:show-item-in-folder",
 
   // Events (main -> renderer)
   CHAT_UPDATE: "chat:update",
@@ -83,6 +87,8 @@ export interface IPCHandlers {
       error?: string;
       updatedResume?: Resume;
       updatedConfig?: CandidatureConfig;
+      company?: string;
+      position?: string;
     };
   };
   "ai:test-connection": {
@@ -106,6 +112,24 @@ export interface IPCHandlers {
       html?: string;
       error?: string;
     };
+  };
+  "resume:generate-final": {
+    request: {
+      resumeJson: Resume;
+      company: string;
+      position: string;
+      themeName?: string;
+    };
+    response: {
+      success: boolean;
+      htmlPath?: string;
+      pdfPath?: string;
+      error?: string;
+    };
+  };
+  "shell:show-item-in-folder": {
+    request: { path: string };
+    response: { success: boolean; error?: string };
   };
 }
 

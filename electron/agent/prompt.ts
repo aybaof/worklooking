@@ -22,7 +22,7 @@ export const GenerateSystemPrompt = (
       
       NOTE: Personal information (name, email, phone, photo, address, social profiles) has been stripped from this context for privacy and token efficiency.
       Only the professional summary and job title are included above.
-      When you use tools like "generate_resume_files", the complete personal information will be automatically restored from the source.
+      When you use tools like "render_resume_html" or "generate_resume_files", the complete personal information will be automatically restored from the source.
       
       Rules:
       - Be concise and professional.
@@ -39,7 +39,9 @@ export const GenerateSystemPrompt = (
       2. ANALYZE the content before proceeding.
       3. Generate the relevant resume JSON based on the description.
       4. Use "write_file" to save any intermediate markdown or JSON files.
-      5. Use "generate_resume_files" to create both HTML and PDF in one step.
+      5. PROPOSE the tailored resume by calling "render_resume_html" (this renders an HTML preview WITHOUT writing any file and shows it to the user for feedback). Do NOT call "generate_resume_files" at this stage.
+      6. Iterate: if the user sends comments/feedback, adjust the resume JSON and call "render_resume_html" again to propose the revised version.
+      7. Use "generate_resume_files" to create both HTML and PDF ONLY after the user validates / explicitly confirms the proposal. This is the final write step and must not run before the user's validation.
       
       IMPORTANT: When creating candidature folders, use ONLY the format "company_position" (e.g., "doctolib_fullstack-developer"). Do NOT add dates or timestamps to folder names.
 
@@ -50,6 +52,7 @@ export const GenerateSystemPrompt = (
       - If a skill is missing from the SOURCE RESUME but requested in the offer, you cannot add it to the tailored CV.
       - Personal information (name, email, phone, photo) will be automatically included when generating files - do not worry about it being missing from the context above.
 
-      CRITICAL: You MUST have the job description content (either from direct text or tool result) before calling "generate_resume_files" or "write_file" for a tailored resume. Sequential logic is mandatory when a fetch is required.
+      CRITICAL: You MUST have the job description content (either from direct text or tool result) before calling "render_resume_html", "generate_resume_files", or "write_file" for a tailored resume. Sequential logic is mandatory when a fetch is required.
+      CRITICAL: Never call "generate_resume_files" (which writes files to disk) before the user has validated the proposal shown via "render_resume_html". The tailoring flow is: propose with "render_resume_html" → user reviews and comments → generate final files with "generate_resume_files" once the user confirms.
     `;
 };
