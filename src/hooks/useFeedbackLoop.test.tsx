@@ -34,17 +34,20 @@ describe("useFeedbackLoop (modal)", () => {
     overrides: Partial<Parameters<typeof useFeedbackLoop>[0]> = {},
   ) {
     return {
-      selectedTheme: "modern-sidebar",
+      defaultTheme: "modern-sidebar",
       initialResume: seedResume,
       sendFeedbackMessage: vi.fn().mockResolvedValue({ resume: null }),
+      renderPreview: vi.fn().mockResolvedValue("<div>preview</div>"),
       onValidated: vi.fn(),
+      onThemeValidated: vi.fn(),
       onClose: vi.fn(),
       ...overrides,
     };
   }
 
   it("seeds the resume from initialResume and renders the preview", async () => {
-    const { result } = renderHook(() => useFeedbackLoop(makeOptions()));
+    const options = makeOptions();
+    const { result } = renderHook(() => useFeedbackLoop(options));
     expect(result.current.resume).toEqual(seedResume);
     await waitFor(() =>
       expect(result.current.previewHtml).toBe("<div>preview</div>"),
@@ -60,9 +63,8 @@ describe("useFeedbackLoop (modal)", () => {
       work: [{ name: "ACME", position: "Ingénieur" }],
     };
     const send = vi.fn().mockResolvedValue({ resume: updatedResume });
-    const { result } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const options = makeOptions({ sendFeedbackMessage: send });
+    const { result } = renderHook(() => useFeedbackLoop(options));
 
     act(() => result.current.setComment("work", "Résume cette section"));
     await act(async () => {
@@ -89,9 +91,8 @@ describe("useFeedbackLoop (modal)", () => {
       (): Promise<{ resume: Resume | null; error?: string }> =>
         new Promise((resolve) => (resolveSend = resolve)),
     );
-    const { result } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const options = makeOptions({ sendFeedbackMessage: send });
+    const { result } = renderHook(() => useFeedbackLoop(options));
 
     act(() => result.current.setComment("work", "change"));
     let pending: Promise<void>;
@@ -109,9 +110,8 @@ describe("useFeedbackLoop (modal)", () => {
 
   it("surfaces errors, preserves comments and unlocks; retry re-sends (AC-12)", async () => {
     const send = vi.fn().mockResolvedValue({ resume: null, error: "boom" });
-    const { result } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const options = makeOptions({ sendFeedbackMessage: send });
+    const { result } = renderHook(() => useFeedbackLoop(options));
 
     act(() => result.current.setComment("work", "change"));
     await act(async () => {
@@ -130,9 +130,8 @@ describe("useFeedbackLoop (modal)", () => {
 
   it("allows many consecutive rounds with no cap (AC-13)", async () => {
     const send = vi.fn().mockResolvedValue({ resume: { basics: {} } });
-    const { result } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const options = makeOptions({ sendFeedbackMessage: send });
+    const { result } = renderHook(() => useFeedbackLoop(options));
 
     for (let i = 0; i < 5; i++) {
       act(() => result.current.setComment("work", `retour ${i}`));
@@ -158,7 +157,8 @@ describe("useFeedbackLoop (modal)", () => {
       const onValidated = vi.fn();
       const onClose = vi.fn();
       const { result, rerender } = renderHook(
-        (props: Parameters<typeof useFeedbackLoop>[0]) => useFeedbackLoop(props),
+        (props: Parameters<typeof useFeedbackLoop>[0]) =>
+          useFeedbackLoop(props),
         { initialProps: makeOptions({ onValidated, onClose }) },
       );
 
@@ -226,9 +226,8 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const { result } = renderHook(() =>
-        useFeedbackLoop(makeOptionsWithCompany({ onValidated, onClose })),
-      );
+      const options = makeOptionsWithCompany({ onValidated, onClose });
+      const { result } = renderHook(() => useFeedbackLoop(options));
 
       await act(async () => {
         await result.current.validate();
@@ -261,9 +260,8 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const { result } = renderHook(() =>
-        useFeedbackLoop(makeOptionsWithCompany({ onValidated, onClose })),
-      );
+      const options = makeOptionsWithCompany({ onValidated, onClose });
+      const { result } = renderHook(() => useFeedbackLoop(options));
 
       await act(async () => {
         await result.current.validate();
@@ -292,15 +290,12 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const { result } = renderHook(() =>
-        useFeedbackLoop(
-          makeOptionsWithCompany({
-            sendFeedbackMessage: send,
-            onValidated,
-            onClose,
-          }),
-        ),
-      );
+      const options = makeOptionsWithCompany({
+        sendFeedbackMessage: send,
+        onValidated,
+        onClose,
+      });
+      const { result } = renderHook(() => useFeedbackLoop(options));
 
       await act(async () => {
         await result.current.validate();
@@ -317,9 +312,9 @@ describe("useFeedbackLoop (modal)", () => {
       });
       // No LLM call during Valider's file-write step (AC-8/AC-12).
       expect(send).not.toHaveBeenCalled();
-      expect(
-        api.invoke.mock.calls.some((c) => c[0] === Channels.AI_CHAT),
-      ).toBe(false);
+      expect(api.invoke.mock.calls.some((c) => c[0] === Channels.AI_CHAT)).toBe(
+        false,
+      );
 
       // A distinct close action is available and functional afterward.
       act(() => result.current.close());
@@ -339,11 +334,8 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const { result } = renderHook(() =>
-        useFeedbackLoop(
-          makeOptionsWithCompany({ sendFeedbackMessage: send }),
-        ),
-      );
+      const options = makeOptionsWithCompany({ sendFeedbackMessage: send });
+      const { result } = renderHook(() => useFeedbackLoop(options));
 
       act(() => result.current.setComment("work", "change"));
       await act(async () => {
@@ -378,11 +370,8 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const { result } = renderHook(() =>
-        useFeedbackLoop(
-          makeOptionsWithCompany({ sendFeedbackMessage: send }),
-        ),
-      );
+      const options = makeOptionsWithCompany({ sendFeedbackMessage: send });
+      const { result } = renderHook(() => useFeedbackLoop(options));
 
       act(() => result.current.setComment("work", "change"));
       await act(async () => {
@@ -413,9 +402,8 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const { result } = renderHook(() =>
-        useFeedbackLoop(makeOptionsWithCompany()),
-      );
+      const options = makeOptionsWithCompany();
+      const { result } = renderHook(() => useFeedbackLoop(options));
 
       // First call: runs synchronously up to the `await window.api.invoke(...)`
       // (setting isRegenerating(true) before suspending), then this act() flushes
@@ -459,9 +447,8 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const { result } = renderHook(() =>
-        useFeedbackLoop(makeOptionsWithCompany()),
-      );
+      const options = makeOptionsWithCompany();
+      const { result } = renderHook(() => useFeedbackLoop(options));
 
       await act(async () => {
         await result.current.validate();
@@ -491,9 +478,8 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const { result } = renderHook(() =>
-        useFeedbackLoop(makeOptionsWithCompany()),
-      );
+      const options = makeOptionsWithCompany();
+      const { result } = renderHook(() => useFeedbackLoop(options));
 
       await act(async () => {
         await result.current.validate();
@@ -522,7 +508,8 @@ describe("useFeedbackLoop (modal)", () => {
       const onValidated = vi.fn();
       const onClose = vi.fn();
       const { result, rerender } = renderHook(
-        (props: Parameters<typeof useFeedbackLoop>[0]) => useFeedbackLoop(props),
+        (props: Parameters<typeof useFeedbackLoop>[0]) =>
+          useFeedbackLoop(props),
         {
           initialProps: makeOptionsWithCompany({ onValidated, onClose }),
         },
@@ -537,7 +524,7 @@ describe("useFeedbackLoop (modal)", () => {
 
       // Same initialResume reference re-renders (parent did not change it): the
       // seededRef guard must prevent any re-seed / validationResult reset.
-      act(() => {
+      await act(async () => {
         rerender(
           makeOptionsWithCompany({
             onValidated,
@@ -550,6 +537,8 @@ describe("useFeedbackLoop (modal)", () => {
       expect(result.current.comments).toEqual({ work: "un commentaire" });
       expect(result.current.round).toBe(0);
       expect(result.current.validationResult).not.toBeNull();
+      // Flush the rerender's preview-render effect to avoid an act() warning.
+      await waitFor(() => expect(result.current.previewHtml).not.toBe(""));
     });
   });
 
@@ -559,9 +548,8 @@ describe("useFeedbackLoop (modal)", () => {
       work: [{ name: "ACME" }],
     };
     const send = vi.fn().mockResolvedValue({ resume: updatedResume });
-    const { result } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const options = makeOptions({ sendFeedbackMessage: send });
+    const { result } = renderHook(() => useFeedbackLoop(options));
 
     // Comment on `summary` so basics.summary (the commented field) flows through
     // the scoped merge and the diff picks it up.
@@ -601,9 +589,8 @@ describe("useFeedbackLoop (modal)", () => {
       work: [{ name: "ACME", position: "Ingénieur" }],
     };
     const send = vi.fn().mockResolvedValue({ resume: updatedResume });
-    const { result } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const options = makeOptions({ sendFeedbackMessage: send });
+    const { result } = renderHook(() => useFeedbackLoop(options));
 
     act(() => result.current.setComment("work", "Ajoute le poste"));
     await act(async () => {
@@ -621,17 +608,16 @@ describe("useFeedbackLoop (modal)", () => {
       (c) => c.after === "DÉRIVE NON DEMANDÉE",
     );
     expect(summaryDrift).toBeUndefined();
-    expect(
-      result.current.changes.every((c) => c.sectionId === "work"),
-    ).toBe(true);
+    expect(result.current.changes.every((c) => c.sectionId === "work")).toBe(
+      true,
+    );
     expect(result.current.changes.length).toBeGreaterThan(0);
   });
 
   it("discards ephemeral comments/round when unmounted and remounted (AC-9)", async () => {
     const send = vi.fn().mockResolvedValue({ resume: { basics: {} } });
-    const { result, unmount } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const firstOptions = makeOptions({ sendFeedbackMessage: send });
+    const { result, unmount } = renderHook(() => useFeedbackLoop(firstOptions));
 
     act(() => result.current.setComment("work", "un commentaire éphémère"));
     await act(async () => {
@@ -642,9 +628,8 @@ describe("useFeedbackLoop (modal)", () => {
     // Closing/unmounting the modal drops all ephemeral React state; a fresh
     // mount starts clean (nothing persisted, nothing restored).
     unmount();
-    const { result: fresh } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const secondOptions = makeOptions({ sendFeedbackMessage: send });
+    const { result: fresh } = renderHook(() => useFeedbackLoop(secondOptions));
     await waitFor(() => expect(fresh.current.previewHtml).not.toBe(""));
     expect(fresh.current.comments).toEqual({});
     expect(fresh.current.round).toBe(0);
@@ -678,7 +663,8 @@ describe("useFeedbackLoop (modal)", () => {
   });
 
   it("hasComments is false with no comments and true once a comment is set (empty-comments edge)", async () => {
-    const { result } = renderHook(() => useFeedbackLoop(makeOptions()));
+    const options = makeOptions();
+    const { result } = renderHook(() => useFeedbackLoop(options));
     // Flush the initial preview-render effect.
     await waitFor(() => expect(result.current.previewHtml).not.toBe(""));
     expect(result.current.hasComments).toBe(false);
@@ -693,9 +679,8 @@ describe("useFeedbackLoop (modal)", () => {
   it("does not write to localStorage (AC-11)", async () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     const send = vi.fn().mockResolvedValue({ resume: { basics: {} } });
-    const { result } = renderHook(() =>
-      useFeedbackLoop(makeOptions({ sendFeedbackMessage: send })),
-    );
+    const options = makeOptions({ sendFeedbackMessage: send });
+    const { result } = renderHook(() => useFeedbackLoop(options));
 
     act(() => result.current.setComment("work", "change"));
     await act(async () => {
@@ -704,5 +689,255 @@ describe("useFeedbackLoop (modal)", () => {
 
     expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();
+  });
+
+  describe("modal-local theme selection (ThemePickerRail wiring)", () => {
+    it("seeds selectedTheme from defaultTheme on mount", async () => {
+      const options = makeOptions({ defaultTheme: "elegant" });
+      const { result } = renderHook(() => useFeedbackLoop(options));
+      expect(result.current.selectedTheme).toBe("elegant");
+      // Flush the initial preview-render effect to avoid an act() warning.
+      await waitFor(() => expect(result.current.previewHtml).not.toBe(""));
+    });
+
+    it("reseeds the local selectedTheme from defaultTheme on a NEW initialResume, not from a stale local selection (AC-8)", async () => {
+      const { result, rerender } = renderHook(
+        (props: Parameters<typeof useFeedbackLoop>[0]) =>
+          useFeedbackLoop(props),
+        { initialProps: makeOptions({ defaultTheme: "modern-sidebar" }) },
+      );
+
+      // The user picks a different theme locally within the session.
+      act(() => result.current.setSelectedTheme("creative"));
+      expect(result.current.selectedTheme).toBe("creative");
+
+      const nextResume: Resume = { basics: { summary: "Nouveau CV" } };
+      act(() => {
+        rerender(
+          makeOptions({
+            defaultTheme: "professional",
+            initialResume: nextResume,
+          }),
+        );
+      });
+
+      // A NEW initialResume reseeds from the NEW defaultTheme, not the stale
+      // local selection ("creative") nor the OLD defaultTheme.
+      expect(result.current.selectedTheme).toBe("professional");
+      // Flush the re-seeded preview-render effect to avoid an act() warning.
+      await waitFor(() =>
+        expect(result.current.previewHtml).not.toBe(""),
+      );
+    });
+
+    it("changing defaultTheme alone (no new initialResume) does not change the local selectedTheme (AC-7/AC-8 boundary)", async () => {
+      const { result, rerender } = renderHook(
+        (props: Parameters<typeof useFeedbackLoop>[0]) =>
+          useFeedbackLoop(props),
+        { initialProps: makeOptions({ defaultTheme: "modern-sidebar" }) },
+      );
+
+      act(() => result.current.setSelectedTheme("bold"));
+      expect(result.current.selectedTheme).toBe("bold");
+      // Flush the theme-switch preview-render effect before rerendering.
+      await waitFor(() => expect(result.current.previewHtml).not.toBe(""));
+
+      // Same initialResume reference (seedResume) — only defaultTheme changes.
+      await act(async () => {
+        rerender(makeOptions({ defaultTheme: "simple" }));
+      });
+
+      // The seededRef guard blocks the reseed: the local selection is untouched.
+      expect(result.current.selectedTheme).toBe("bold");
+    });
+
+    it("setSelectedTheme re-renders the main preview via the injected renderPreview with the new theme + current resume, and does not touch comments/round/changes/lastRoundCommentedIds/validationResult (AC-5, AC-6)", async () => {
+      const renderPreview = vi.fn().mockResolvedValue("<div>preview</div>");
+      const options = makeOptions({ renderPreview });
+      const { result } = renderHook(() => useFeedbackLoop(options));
+      await waitFor(() => expect(result.current.previewHtml).not.toBe(""));
+      renderPreview.mockClear();
+      renderPreview.mockResolvedValue("<div>autre thème</div>");
+
+      act(() => result.current.setComment("work", "un brouillon"));
+
+      act(() => result.current.setSelectedTheme("elegant"));
+
+      await waitFor(() =>
+        expect(renderPreview).toHaveBeenCalledWith("elegant", seedResume),
+      );
+      await waitFor(() =>
+        expect(result.current.previewHtml).toBe("<div>autre thème</div>"),
+      );
+
+      // Unrelated state is untouched by a theme switch.
+      expect(result.current.comments).toEqual({ work: "un brouillon" });
+      expect(result.current.round).toBe(0);
+      expect(result.current.changes).toEqual([]);
+      expect(result.current.lastRoundCommentedIds).toEqual([]);
+      expect(result.current.validationResult).toBeNull();
+    });
+
+    it("validate() sends the CURRENTLY selected local theme (not defaultTheme) as themeName (AC-9)", async () => {
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({ success: true, htmlPath: "/tmp/h.html" });
+        }
+        return Promise.resolve({});
+      });
+      const options = makeOptions({
+        defaultTheme: "modern-sidebar",
+        initialCompany: "Doctolib",
+        initialPosition: "Développeur Fullstack",
+      });
+      const { result } = renderHook(() => useFeedbackLoop(options));
+
+      act(() => result.current.setSelectedTheme("minimal"));
+      await waitFor(() => expect(result.current.selectedTheme).toBe("minimal"));
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      const genCall = api.invoke.mock.calls.find(
+        (c) => c[0] === Channels.RESUME_GENERATE_FINAL,
+      );
+      expect(genCall?.[1]).toMatchObject({ themeName: "minimal" });
+    });
+
+    it("onThemeValidated fires with the selected theme ONLY on a successful validate() (AC-10, AC-11)", async () => {
+      const onThemeValidated = vi.fn();
+
+      // 1) Blocked validate (no company/position): does NOT fire.
+      const blockedOptions = makeOptions({ onThemeValidated });
+      const { result: blockedResult } = renderHook(() =>
+        useFeedbackLoop(blockedOptions),
+      );
+      await act(async () => {
+        await blockedResult.current.validate();
+      });
+      expect(onThemeValidated).not.toHaveBeenCalled();
+
+      // 2) success:false response: does NOT fire.
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({ success: false, error: "boom" });
+        }
+        return Promise.resolve({});
+      });
+      const failedOptions = makeOptions({
+        onThemeValidated,
+        initialCompany: "Doctolib",
+        initialPosition: "Développeur",
+      });
+      const { result: failedResult } = renderHook(() =>
+        useFeedbackLoop(failedOptions),
+      );
+      await act(async () => {
+        await failedResult.current.validate();
+      });
+      expect(onThemeValidated).not.toHaveBeenCalled();
+
+      // 3) Rejected invoke: does NOT fire.
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.reject(new Error("network down"));
+        }
+        return Promise.resolve({});
+      });
+      const rejectedOptions = makeOptions({
+        onThemeValidated,
+        initialCompany: "Doctolib",
+        initialPosition: "Développeur",
+      });
+      const { result: rejectedResult } = renderHook(() =>
+        useFeedbackLoop(rejectedOptions),
+      );
+      await act(async () => {
+        await rejectedResult.current.validate();
+      });
+      expect(onThemeValidated).not.toHaveBeenCalled();
+
+      // 4) A plain regeneration round (submitComments): does NOT fire.
+      const send = vi.fn().mockResolvedValue({ resume: { basics: {} } });
+      const regenOptions = makeOptions({
+        onThemeValidated,
+        sendFeedbackMessage: send,
+      });
+      const { result: regenResult } = renderHook(() =>
+        useFeedbackLoop(regenOptions),
+      );
+      act(() => regenResult.current.setComment("work", "change"));
+      await act(async () => {
+        await regenResult.current.submitComments();
+      });
+      expect(onThemeValidated).not.toHaveBeenCalled();
+
+      // 5) close(): does NOT fire.
+      act(() => regenResult.current.close());
+      expect(onThemeValidated).not.toHaveBeenCalled();
+
+      // 6) A successful validate() with a locally-switched theme fires with
+      // THAT theme (not defaultTheme).
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({ success: true, htmlPath: "/tmp/h.html" });
+        }
+        return Promise.resolve({});
+      });
+      const successOptions = makeOptions({
+        onThemeValidated,
+        defaultTheme: "modern-sidebar",
+        initialCompany: "Doctolib",
+        initialPosition: "Développeur",
+      });
+      const { result: successResult } = renderHook(() =>
+        useFeedbackLoop(successOptions),
+      );
+      act(() => successResult.current.setSelectedTheme("compact"));
+      await act(async () => {
+        await successResult.current.validate();
+      });
+      expect(onThemeValidated).toHaveBeenCalledTimes(1);
+      expect(onThemeValidated).toHaveBeenCalledWith("compact");
+    });
+
+    it("does not write the theme selection to localStorage on a theme switch (AC-7)", async () => {
+      const setItem = vi.spyOn(Storage.prototype, "setItem");
+      const options = makeOptions();
+      const { result } = renderHook(() => useFeedbackLoop(options));
+
+      act(() => result.current.setSelectedTheme("bold"));
+      await waitFor(() => expect(result.current.selectedTheme).toBe("bold"));
+
+      expect(setItem).not.toHaveBeenCalled();
+      setItem.mockRestore();
+    });
+
+    it("if renderPreview rejects after a theme switch, sets the existing error state without throwing (AC-14)", async () => {
+      const renderPreview = vi
+        .fn()
+        .mockResolvedValueOnce("<div>preview</div>")
+        .mockRejectedValueOnce(new Error("échec du rendu"));
+      const options = makeOptions({ renderPreview });
+      const { result } = renderHook(() => useFeedbackLoop(options));
+      await waitFor(() => expect(result.current.previewHtml).not.toBe(""));
+
+      act(() => result.current.setSelectedTheme("creative"));
+
+      await waitFor(() => expect(result.current.error).toBe("échec du rendu"));
+    });
   });
 });

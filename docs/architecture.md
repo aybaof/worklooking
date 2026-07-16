@@ -113,6 +113,31 @@ src/                      # Renderer (React 19 + react-router-dom)
      modal. The same guard also reseeds `company`/`position` from
      `initialCompany`/`initialPosition` when a NEW tailored resume opens the
      modal.
+   - **In-modal theme picker.** `ThemePickerRail` (rendered directly above
+     `RegenControls` in the left rail) is a collapsed-by-default toggle showing
+     the currently selected theme's name; expanding it reveals a compact grid
+     of live per-theme thumbnails (one `ThemeThumbnail` per
+     `useTemplateSelection.availableThemes` entry, mounted only while
+     expanded), each rendering its OWN mini-preview via the same injected
+     `renderPreview` (reused from `useTemplateSelection`, no duplicated
+     `Channels.RESUME_RENDER_PREVIEW` call site) with independent
+     loading/error state so one broken thumbnail never affects the others.
+     `useFeedbackLoop` owns the actual selection as a modal-local
+     `selectedTheme`, seeded from a `defaultTheme` option (the app-wide
+     `templateSelection.selectedTheme`) on the SAME `seededRef`-guarded reseed
+     effect as comments/round — so switching themes mid-session is a pure
+     rendering concern that never resets comments/round/diff/validation
+     state, and the main `PreviewFrame` re-renders against this local
+     selection, not the app-wide default. The toggle and grid are disabled
+     while `isRegenerating`. Clicking Valider sends the modal's CURRENT
+     `selectedTheme` (not necessarily the app-wide default) as `themeName` to
+     `resume:generate-final`; on success ONLY, `useFeedbackLoop` calls the
+     injected `onThemeValidated(themeId)` callback, wired in `App.tsx` to
+     `templateSelection.setSelectedTheme`, promoting the chosen theme to the
+     new app-wide default (persisted `localStorage`) for "Mon CV" and future
+     tailored resumes — a blocked/failed/rejected Valider, a plain
+     regeneration round, or closing the modal never touch the app-wide
+     default.
    - **Deterministic Valider + blocked/error/success states.** Clicking Valider
      no longer sends a message through the LLM conversation. `useFeedbackLoop`
      holds the LATEST non-empty `company`/`position` captured from

@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Resume } from "@/../shared/resume-types";
 import { ResumeFieldChange } from "@/../shared/resumeDiff";
 import { ValidationResult } from "@/hooks/useFeedbackLoop";
+import { ThemeInfo } from "@/hooks/useTemplateSelection";
 import { PreviewFrame } from "@/components/feedback-loop/PreviewFrame";
 import { SectionPinRail } from "@/components/feedback-loop/SectionPinRail";
 import { CommentPopover } from "@/components/feedback-loop/CommentPopover";
+import { ThemePickerRail } from "@/components/feedback-loop/ThemePickerRail";
 import { RegenControls } from "@/components/feedback-loop/RegenControls";
 import { RoundDiffPanel } from "@/components/feedback-loop/RoundDiffPanel";
 import { UnsavedCommentsConfirm } from "@/components/feedback-loop/UnsavedCommentsConfirm";
@@ -27,6 +29,12 @@ interface FeedbackModalProps {
   hasComments: boolean;
   /** Result of the last successful Valider write, or `null` if none yet. */
   validationResult: ValidationResult | null;
+  /** The modal's currently selected theme (owned by `useFeedbackLoop`). */
+  selectedTheme: string;
+  availableThemes: ThemeInfo[];
+  onSelectTheme: (themeId: string) => void;
+  /** Reused from `useTemplateSelection.renderPreview` — no IPC contract change. */
+  renderThemePreview: (themeName: string, resume: Resume) => Promise<string>;
   setComment: (sectionId: string, value: string) => void;
   clearComment: (sectionId: string) => void;
   submitComments: () => void;
@@ -55,6 +63,10 @@ export function FeedbackModal({
   activeTool,
   hasComments,
   validationResult,
+  selectedTheme,
+  availableThemes,
+  onSelectTheme,
+  renderThemePreview,
   setComment,
   clearComment,
   submitComments,
@@ -165,6 +177,15 @@ export function FeedbackModal({
                 onClose={() => setActiveSectionId(null)}
               />
             )}
+
+            <ThemePickerRail
+              resume={resume}
+              selectedTheme={selectedTheme}
+              availableThemes={availableThemes}
+              disabled={isRegenerating}
+              onSelectTheme={onSelectTheme}
+              renderPreview={renderThemePreview}
+            />
 
             <RegenControls
               isRegenerating={isRegenerating}

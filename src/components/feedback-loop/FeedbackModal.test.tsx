@@ -40,6 +40,13 @@ function baseProps(overrides: Partial<Parameters<typeof FeedbackModal>[0]> = {})
     activeTool: null,
     hasComments: false,
     validationResult: null,
+    selectedTheme: "modern-sidebar",
+    availableThemes: [
+      { id: "modern-sidebar", label: "Modern Sidebar", description: "" },
+      { id: "professional", label: "Professional", description: "" },
+    ],
+    onSelectTheme: vi.fn(),
+    renderThemePreview: vi.fn().mockResolvedValue("<div>aperçu</div>"),
     setComment: vi.fn(),
     clearComment: vi.fn(),
     submitComments: vi.fn(),
@@ -417,5 +424,41 @@ describe("FeedbackModal", () => {
     expect(confirm.getAttribute("role")).toBe("alertdialog");
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
+  });
+
+  it("renders the theme-picker toggle near RegenControls without displacing the existing rail elements (AC-1)", () => {
+    render(<FeedbackModal {...baseProps()} />);
+
+    // Existing rail elements remain present, none removed/reordered.
+    expect(screen.getByText("Sections du CV")).not.toBeNull();
+    expect(screen.getByText(/Thème :/)).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Régénérer/ })).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Valider/ })).not.toBeNull();
+  });
+
+  it("theme toggle label reflects the selectedTheme prop (AC-2)", () => {
+    render(
+      <FeedbackModal {...baseProps({ selectedTheme: "professional" })} />,
+    );
+
+    expect(screen.getByText("Thème : Professional")).not.toBeNull();
+  });
+
+  it("clicking a thumbnail in the expanded grid calls onSelectTheme (AC-5)", async () => {
+    const onSelectTheme = vi.fn();
+    render(<FeedbackModal {...baseProps({ onSelectTheme })} />);
+
+    fireEvent.click(screen.getByText("Thème : Modern Sidebar"));
+    await screen.findByText("Professional");
+
+    fireEvent.click(screen.getByText("Professional"));
+    expect(onSelectTheme).toHaveBeenCalledWith("professional");
+  });
+
+  it("theme toggle is disabled when isRegenerating is true (AC-12)", () => {
+    render(<FeedbackModal {...baseProps({ isRegenerating: true })} />);
+
+    const toggle = screen.getByText("Thème : Modern Sidebar").closest("button");
+    expect(toggle?.hasAttribute("disabled")).toBe(true);
   });
 });

@@ -21,8 +21,13 @@ export interface ValidationResult {
 }
 
 interface UseFeedbackLoopOptions {
-  /** Selected theme used for the themed preview render. */
-  selectedTheme: string;
+  /**
+   * App-wide default theme from `useTemplateSelection`, used ONLY to seed the
+   * modal's own local `selectedTheme` on each reseed (a NEW `initialResume`) —
+   * NOT the theme actually rendered/sent, which is the hook's own local
+   * `selectedTheme` state (see below).
+   */
+  defaultTheme: string;
   /**
    * The tailored resume that opened the loop, or `null` when the modal is
    * closed. Changing this to a new resume (re)seeds the loop.
@@ -48,8 +53,23 @@ interface UseFeedbackLoopOptions {
     company?: string;
     position?: string;
   }>;
+  /**
+   * Injected from `useTemplateSelection.renderPreview` so the main preview
+   * effect reuses the exact same IPC-wrapping function as the thumbnail grid
+   * (`ThemePickerRail`) — no duplicated `Channels.RESUME_RENDER_PREVIEW` call
+   * sites.
+   */
+  renderPreview: (themeName: string, resume: Resume) => Promise<string>;
   /** Persist the validated resume (existing `useResume` auto-save owner). */
   onValidated: (resume: Resume) => void;
+  /**
+   * Called ONLY on a successful `validate()`, with the modal's currently
+   * selected theme, so the caller (`App.tsx`) can promote it to the app-wide
+   * default via `templateSelection.setSelectedTheme`. Never called on a
+   * blocked Valider, a failed/rejected IPC call, a plain regeneration round
+   * (`submitComments`), or `close()`.
+   */
+  onThemeValidated: (themeId: string) => void;
   /** Close the modal. */
   onClose: () => void;
 }
@@ -84,17 +104,30 @@ interface UseFeedbackLoopOptions {
  *   never sent into a prompt). `lastRoundCommentedIds` lists the section ids
  *   commented this round so the panel can flag LLM no-ops.
  * - No `localStorage` / disk persistence of loop state (AC-11).
+ * - **Modal-local theme selection.** `selectedTheme` is OWNED by this hook
+ *   (not a fixed prop): it is seeded from `defaultTheme` on the SAME
+ *   `seededRef`-guarded reseed effect as comments/round/etc., so it tracks
+ *   whatever the app-wide default currently is each time a NEW tailored
+ *   resume opens the modal, but is otherwise free to diverge as the user
+ *   clicks through the `ThemePickerRail` — purely a rendering concern for the
+ *   SAME resume/round, so it never touches comments/round/diff/validation
+ *   state. The main preview effect and `validate()` both use this local
+ *   value (via the injected `renderPreview`), and `onThemeValidated` promotes
+ *   it to the app-wide default ONLY on a successful `validate()`.
  */
 export function useFeedbackLoop({
-  selectedTheme,
+  defaultTheme,
   initialResume,
   initialCompany,
   initialPosition,
   sendFeedbackMessage,
+  renderPreview,
   onValidated,
+  onThemeValidated,
   onClose,
 }: UseFeedbackLoopOptions) {
   const [resume, setResume] = useState<Resume | null>(initialResume);
+  const [selectedTheme, setSelectedTheme] = useState<string>(defaultTheme);
   const [comments, setComments] = useState<Record<string, string>>({});
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -129,6 +162,7 @@ export function useFeedbackLoop({
     if (initialResume && seededRef.current !== initialResume) {
       seededRef.current = initialResume;
       setResume(initialResume);
+      setSelectedTheme(defaultTheme);
       setComments({});
       setRound(0);
       setError(null);
@@ -138,7 +172,7 @@ export function useFeedbackLoop({
       setPosition(initialPosition);
       setValidationResult(null);
     }
-  }, [initialResume, initialCompany, initialPosition]);
+  }, [initialResume, initialCompany, initialPosition, defaultTheme]);
 
   const setComment = useCallback((sectionId: string, value: string) => {
     setComments((prev) => ({ ...prev, [sectionId]: value }));
@@ -158,19 +192,10 @@ export function useFeedbackLoop({
     let cancelled = false;
     setIsPreviewLoading(true);
 
-    window.api
-      .invoke(Channels.RESUME_RENDER_PREVIEW, {
-        resumeJson: resume,
-        themeName: selectedTheme,
-      })
-      .then((response) => {
+    renderPreview(selectedTheme, resume)
+      .then((html) => {
         if (cancelled) return;
-        if (response.error) {
-          setError(response.error);
-          setPreviewHtml("");
-        } else {
-          setPreviewHtml(response.html || "");
-        }
+        setPreviewHtml(html);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -183,7 +208,7 @@ export function useFeedbackLoop({
     return () => {
       cancelled = true;
     };
-  }, [resume, selectedTheme]);
+  }, [resume, selectedTheme, renderPreview]);
 
   // Collect non-empty comments as section+comment pairs.
   const pendingComments = useCallback((): SectionComment[] => {
@@ -307,12 +332,21 @@ export function useFeedbackLoop({
         pdfPath: response.pdfPath,
         warning: response.pdfPath ? undefined : response.error,
       });
+      onThemeValidated(selectedTheme);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsRegenerating(false);
     }
-  }, [resume, isRegenerating, company, position, selectedTheme, onValidated]);
+  }, [
+    resume,
+    isRegenerating,
+    company,
+    position,
+    selectedTheme,
+    onValidated,
+    onThemeValidated,
+  ]);
 
   /**
    * "Reveal in folder": no-ops if there is no successful `validationResult` or
@@ -327,6 +361,8 @@ export function useFeedbackLoop({
 
   return {
     resume,
+    selectedTheme,
+    setSelectedTheme,
     comments,
     previewHtml,
     isPreviewLoading,

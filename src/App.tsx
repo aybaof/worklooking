@@ -74,12 +74,14 @@ export default function App() {
   });
 
   const feedback = useFeedbackLoop({
-    selectedTheme: templateSelection.selectedTheme,
+    defaultTheme: templateSelection.selectedTheme,
     initialResume: feedbackResume,
     initialCompany: feedbackCompany,
     initialPosition: feedbackPosition,
     sendFeedbackMessage: chat.sendFeedbackMessage,
+    renderPreview: templateSelection.renderPreview,
     onValidated: resume.setResumeByAi,
+    onThemeValidated: templateSelection.setSelectedTheme,
     onClose: () => setFeedbackResume(null),
   });
 
@@ -246,6 +248,10 @@ export default function App() {
             commentedSectionIds={feedback.lastRoundCommentedIds}
             activeTool={chat.activeTool}
             hasComments={feedback.hasComments}
+            selectedTheme={feedback.selectedTheme}
+            availableThemes={templateSelection.availableThemes}
+            onSelectTheme={feedback.setSelectedTheme}
+            renderThemePreview={templateSelection.renderPreview}
             setComment={feedback.setComment}
             clearComment={feedback.clearComment}
             submitComments={feedback.submitComments}
