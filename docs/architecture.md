@@ -28,7 +28,8 @@ electron/                 # Main process
 │   └── <theme>/          # index.ts + resume.hbs + style.css
 ├── lib/                  # Pure, testable helpers used by main.ts
 │   ├── paths.ts          # IPCError + validateAndSanitizePath (traversal guard)
-│   └── auth-detect.ts    # detectsAuthRequired (fetch auth-wall heuristic)
+│   ├── auth-detect.ts    # detectsAuthRequired (fetch auth-wall heuristic)
+│   └── candidature-folder.ts # deriveCandidatureFolderSegment (Valider folder naming)
 └── utils/
     └── image-processor.ts
 
@@ -39,7 +40,7 @@ shared/                   # Cross-process types (source of truth)
 ├── provider-types.ts     # ProviderApi, ProviderPreset, PROVIDER_PRESETS
 ├── chat-types.ts         # Chat message / tool payloads
 ├── resume-sections.ts    # RESUME_SECTIONS descriptor (feedback-loop pins; PII-free)
-└── feedbackMessages.ts   # PII-free French regeneration/validation message builders
+└── feedbackMessages.ts   # PII-free French regeneration message builder
 
 src/                      # Renderer (React 19 + react-router-dom)
 ├── App.tsx               # Root + routing
@@ -68,10 +69,14 @@ src/                      # Renderer (React 19 + react-router-dom)
 6. **In-app modal for the CV feedback loop (single window).** When `ai:chat`
    returns an `updatedResume`, `useChat` opens the `FeedbackModal` in the main
    window. `useFeedbackLoop` holds the ephemeral draft comments + preview and
-   drives regeneration/validation by continuing the SAME conversation via
-   `useChat.sendFeedbackMessage` (no second `BrowserWindow`, no new IPC channels).
-   The validated resume persists via `useResume.setResumeByAi`. This replaced an
-   earlier, unreliable second-`BrowserWindow` design. See `docs/ipc.md`.
+   drives REGENERATION rounds by continuing the SAME conversation via
+   `useChat.sendFeedbackMessage` (no second `BrowserWindow`). Validation
+   ("Valider"), however, is a DETERMINISTIC main-process write reached directly
+   from the renderer via the new `resume:generate-final` IPC channel — no LLM
+   round-trip — plus a `shell:show-item-in-folder` channel for the resulting
+   "reveal in folder" action. The validated resume persists via
+   `useResume.setResumeByAi`. This replaced an earlier, unreliable
+   second-`BrowserWindow` design. See `docs/ipc.md`.
 
    UX details of the loop:
    - **Hidden feedback turns.** Feedback-loop turns (regeneration/validation
@@ -105,4 +110,21 @@ src/                      # Renderer (React 19 + react-router-dom)
      `window.confirm`); cancelling keeps the modal + comments intact.
    - **Reseed guard.** A `seededRef` in `useFeedbackLoop` ensures an
      `updatedResume` returned by validation cannot re-open/re-seed the closed
+     modal. The same guard also reseeds `company`/`position` from
+     `initialCompany`/`initialPosition` when a NEW tailored resume opens the
      modal.
+   - **Deterministic Valider + blocked/error/success states.** Clicking Valider
+     no longer sends a message through the LLM conversation. `useFeedbackLoop`
+     holds the LATEST non-empty `company`/`position` captured from
+     `render_resume_html` (across regeneration rounds) and calls
+     `resume:generate-final` directly: if `company`/`position` are unknown, the
+     click is **blocked** with an inline French error and no IPC call is made
+     (the user must relaunch a CV proposal so the model supplies them); on an
+     IPC error/`success: false`, an inline French error is shown and the modal
+     stays open/retryable; on success, `onValidated` persists the resume WITHOUT
+     closing the modal, and a `ValidationSuccessPanel` shows the written
+     path(s), any partial-PDF-failure warning, and an "Afficher dans le
+     dossier" button (`revealInFolder`, via `shell:show-item-in-folder`) that
+     picks the PDF path if present, else the HTML path. A further regeneration
+     round clears the success state (a new round invalidates the prior
+     validation). See `docs/ipc.md`.

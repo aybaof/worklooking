@@ -47,6 +47,15 @@ export default function App() {
   // The tailored resume that opened the in-app feedback modal (single-window
   // design — the loop runs here, not in a second BrowserWindow). `null` = closed.
   const [feedbackResume, setFeedbackResume] = useState<Resume | null>(null);
+  // Company/position captured from the SAME `render_resume_html` call that
+  // produced `feedbackResume` (when the model supplied them) — threaded into
+  // `useFeedbackLoop` so Valider can name the candidature folder.
+  const [feedbackCompany, setFeedbackCompany] = useState<string | undefined>(
+    undefined,
+  );
+  const [feedbackPosition, setFeedbackPosition] = useState<
+    string | undefined
+  >(undefined);
 
   const chat = useChat({
     apiKey: settings.apiKey,
@@ -57,12 +66,18 @@ export default function App() {
     candidature: candidature.config,
     selectedTheme: templateSelection.selectedTheme,
     onCandidatureUpdate: candidature.setCandidatureByAi,
-    onTailoredResume: setFeedbackResume,
+    onTailoredResume: (tailored, company, position) => {
+      setFeedbackResume(tailored);
+      setFeedbackCompany(company);
+      setFeedbackPosition(position);
+    },
   });
 
   const feedback = useFeedbackLoop({
     selectedTheme: templateSelection.selectedTheme,
     initialResume: feedbackResume,
+    initialCompany: feedbackCompany,
+    initialPosition: feedbackPosition,
     sendFeedbackMessage: chat.sendFeedbackMessage,
     onValidated: resume.setResumeByAi,
     onClose: () => setFeedbackResume(null),
@@ -235,6 +250,8 @@ export default function App() {
             clearComment={feedback.clearComment}
             submitComments={feedback.submitComments}
             validate={feedback.validate}
+            validationResult={feedback.validationResult}
+            onRevealInFolder={feedback.revealInFolder}
             onClose={feedback.close}
           />
         </ErrorBoundary>

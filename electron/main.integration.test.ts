@@ -46,6 +46,19 @@ const handlers = new Map<string, Handler>();
 // Controls what the mocked AiClientRouter.runChat does with its runTool cb.
 let runChatImpl: (options: ChatRunOptions) => Promise<ChatRunResult>;
 
+// Controls what the mocked `BrowserWindow.webContents.printToPDF` does — the
+// default resolves a minimal valid PDF buffer so PDF generation SUCCEEDS by
+// default (previously any un-mocked call would fail HTML.writeFileSync on
+// `undefined` data, silently forcing every test onto the partial-success
+// path). Individual tests can override this to force a PDF failure (e.g. the
+// partial-success case below). Must be prefixed "mock" so Vitest's hoisting
+// of `vi.mock(...)` factories can reference it.
+let mockPrintToPDFImpl: (...args: unknown[]) => unknown = () =>
+  Buffer.from("%PDF-1.4 fake pdf content for tests");
+
+// Captures `shell.showItemInFolder` calls for the reveal-in-folder handler.
+const mockShowItemInFolder = vi.fn();
+
 // --- Mocks (hoisted before imports) ---
 vi.mock("electron", () => ({
   app: {
@@ -68,7 +81,7 @@ vi.mock("electron", () => ({
       getTitle: vi.fn(),
       getURL: vi.fn(),
       executeJavaScript: vi.fn(),
-      printToPDF: vi.fn(),
+      printToPDF: vi.fn((...args: unknown[]) => mockPrintToPDFImpl(...args)),
     };
     loadURL = vi.fn();
     loadFile = vi.fn();
@@ -77,6 +90,9 @@ vi.mock("electron", () => ({
   },
   dialog: {
     showOpenDialog: vi.fn(),
+  },
+  shell: {
+    showItemInFolder: mockShowItemInFolder,
   },
   IpcMainInvokeEvent: class {},
 }));
@@ -174,6 +190,9 @@ afterAll(() => {
 beforeEach(() => {
   // Default: runChat does nothing (no tool calls) and returns fixed text.
   runChatImpl = async () => ({ content: "done" });
+  // Default: PDF generation succeeds with a minimal valid buffer.
+  mockPrintToPDFImpl = () => Buffer.from("%PDF-1.4 fake pdf content for tests");
+  mockShowItemInFolder.mockReset();
 });
 
 describe("FILE_WRITE / FILE_READ handlers (temp dir)", () => {
@@ -394,10 +413,16 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
     const filesBefore = listFilesRecursive(TMP_ROOT);
 
     let toolResult: unknown;
-    let chatResponse: { updatedResume?: Resume | null } = {};
+    let chatResponse: {
+      updatedResume?: Resume | null;
+      company?: string;
+      position?: string;
+    } = {};
     runChatImpl = async (options) => {
       toolResult = await options.runTool("render_resume_html", {
         resumeJson: proposed,
+        company: "Doctolib",
+        position: "Développeur Fullstack",
       } as unknown as Record<string, unknown>);
       return { content: "voici votre proposition" };
     };
@@ -410,7 +435,7 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
       resume: sourceResume,
       candidature: MIN_CANDIDATURE,
       selectedTheme: "professional",
-    })) as { updatedResume?: Resume | null };
+    })) as { updatedResume?: Resume | null; company?: string; position?: string };
 
     // The tool succeeded and reported an HTML size but returned NO html/pdf path
     // (write-free — the renderer previews via resume:render-preview instead).
@@ -424,6 +449,11 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
     expect(res.htmlSize).toBeGreaterThan(0);
     expect(res.htmlPath).toBeUndefined();
     expect(res.pdfPath).toBeUndefined();
+
+    // company/position captured by executeTool's render_resume_html case flow
+    // through runChatLoop → the ai:chat response (AC-2, AC-3).
+    expect(chatResponse.company).toBe("Doctolib");
+    expect(chatResponse.position).toBe("Développeur Fullstack");
 
     // The proposal opens the modal: ai:chat returns updatedResume (in-memory).
     // PII fields were restored from the source resume (name/image) at render time.
@@ -610,5 +640,214 @@ describe("executeTool dispatcher (via AI_CHAT runTool)", () => {
     });
 
     expect(toolResult).toEqual({ error: "Unknown tool: does_not_exist" });
+  });
+});
+
+describe("RESUME_GENERATE_FINAL handler", () => {
+  it("success: writes resume.html AND resume.pdf under candidatures/<company>_<position>/ (AC-5, AC-13)", async () => {
+    const resumeJson: Resume = {
+      basics: { name: "Jean Dupont", summary: "Résumé", label: "Développeur" },
+    };
+
+    const res = (await invoke(Channels.RESUME_GENERATE_FINAL, {
+      resumeJson,
+      company: "Doctolib",
+      position: "Développeur Fullstack",
+      themeName: "professional",
+    })) as {
+      success: boolean;
+      htmlPath?: string;
+      pdfPath?: string;
+      error?: string;
+    };
+
+    expect(res.error).toBeUndefined();
+    expect(res.success).toBe(true);
+
+    const expectedHtmlPath = path.join(
+      TMP_ROOT,
+      "candidatures",
+      "doctolib_developpeur-fullstack",
+      "resume.html",
+    );
+    const expectedPdfPath = path.join(
+      TMP_ROOT,
+      "candidatures",
+      "doctolib_developpeur-fullstack",
+      "resume.pdf",
+    );
+    expect(res.htmlPath).toBe(expectedHtmlPath);
+    expect(res.pdfPath).toBe(expectedPdfPath);
+    expect(fs.existsSync(expectedHtmlPath)).toBe(true);
+    expect(fs.existsSync(expectedPdfPath)).toBe(true);
+  });
+
+  it("reuses the SAME render/write/PII-restore code path as generate_resume_files (byte-identical HTML) (AC-5)", async () => {
+    const sourceResume: Resume = {
+      basics: {
+        name: "Jean Parity",
+        email: "jean@parity.fr",
+        summary: "Résumé de parité",
+        label: "Label de parité",
+      },
+    };
+    // Both call sites receive an EQUIVALENT resumeJson whose `basics` already
+    // matches the source (so restoreBasicsPii is a literal no-op restore on
+    // both paths, per the plan's design decision for resume:generate-final).
+    const proposedForTool: Resume = { basics: { ...sourceResume.basics } };
+    const proposedForFinal: Resume = { basics: { ...sourceResume.basics } };
+
+    // Path 1: existing generate_resume_files tool (via runTool/AI_CHAT).
+    runChatImpl = async (options) => {
+      await options.runTool("generate_resume_files", {
+        resumeJson: proposedForTool,
+        htmlPath: "candidatures/parity-tool/resume.html",
+        pdfPath: "candidatures/parity-tool/resume.pdf",
+      } as unknown as Record<string, unknown>);
+      return { content: "ok" };
+    };
+    await invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: sourceResume,
+      candidature: MIN_CANDIDATURE,
+      selectedTheme: "professional",
+    });
+
+    // Path 2: new deterministic resume:generate-final IPC channel.
+    await invoke(Channels.RESUME_GENERATE_FINAL, {
+      resumeJson: proposedForFinal,
+      company: "ParityCo",
+      position: "Parity Position",
+      themeName: "professional",
+    });
+
+    const htmlFromTool = fs.readFileSync(
+      path.join(TMP_ROOT, "candidatures", "parity-tool", "resume.html"),
+      "utf8",
+    );
+    const htmlFromFinal = fs.readFileSync(
+      path.join(
+        TMP_ROOT,
+        "candidatures",
+        "parityco_parity-position",
+        "resume.html",
+      ),
+      "utf8",
+    );
+    expect(htmlFromFinal).toBe(htmlFromTool);
+  });
+
+  it("partial success: HTML written, PDF failure returns success:true with an error and no pdfPath (AC-5)", async () => {
+    mockPrintToPDFImpl = () => {
+      throw new Error("PDF engine crashed");
+    };
+
+    const res = (await invoke(Channels.RESUME_GENERATE_FINAL, {
+      resumeJson: { basics: { name: "X", summary: "S", label: "L" } },
+      company: "PartialCo",
+      position: "Partial Pos",
+    })) as {
+      success: boolean;
+      htmlPath?: string;
+      pdfPath?: string;
+      error?: string;
+    };
+
+    expect(res.success).toBe(true);
+    expect(res.htmlPath).toBeDefined();
+    expect(res.pdfPath).toBeUndefined();
+    expect(res.error).toContain("PDF engine crashed");
+
+    const folder = path.join(TMP_ROOT, "candidatures", "partialco_partial-pos");
+    expect(fs.existsSync(path.join(folder, "resume.html"))).toBe(true);
+    expect(fs.existsSync(path.join(folder, "resume.pdf"))).toBe(false);
+  });
+
+  it("missing/blank company or position returns success:false and writes no files (defense-in-depth)", async () => {
+    const filesBefore = listFilesRecursive(TMP_ROOT);
+
+    const res = (await invoke(Channels.RESUME_GENERATE_FINAL, {
+      resumeJson: { basics: { name: "X" } },
+      company: "",
+      position: "Développeur",
+    })) as { success: boolean; error?: string };
+
+    expect(res.success).toBe(false);
+    expect(res.error).toBeTruthy();
+
+    const filesAfter = listFilesRecursive(TMP_ROOT);
+    expect(filesAfter).toEqual(filesBefore);
+  });
+
+  it("overwrite, not duplicate: validating twice for the SAME company/position writes the SAME folder with updated content (AC-15)", async () => {
+    const company = "OverwriteCo";
+    const position = "Overwrite Position";
+    const folder = path.join(
+      TMP_ROOT,
+      "candidatures",
+      "overwriteco_overwrite-position",
+    );
+
+    await invoke(Channels.RESUME_GENERATE_FINAL, {
+      resumeJson: {
+        basics: { name: "X", summary: "Premier contenu", label: "L" },
+      },
+      company,
+      position,
+    });
+    const firstHtml = fs.readFileSync(path.join(folder, "resume.html"), "utf8");
+    expect(firstHtml).toContain("Premier contenu");
+
+    await invoke(Channels.RESUME_GENERATE_FINAL, {
+      resumeJson: {
+        basics: { name: "X", summary: "Second contenu", label: "L" },
+      },
+      company,
+      position,
+    });
+    const secondHtml = fs.readFileSync(
+      path.join(folder, "resume.html"),
+      "utf8",
+    );
+    expect(secondHtml).toContain("Second contenu");
+    expect(secondHtml).not.toContain("Premier contenu");
+
+    // Only ONE candidature folder for this company/position — no duplicate.
+    const candidaturesDir = path.join(TMP_ROOT, "candidatures");
+    const siblingDirs = fs
+      .readdirSync(candidaturesDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.startsWith("overwriteco"))
+      .map((e) => e.name);
+    expect(siblingDirs).toEqual(["overwriteco_overwrite-position"]);
+  });
+});
+
+describe("SHELL_SHOW_ITEM_IN_FOLDER handler", () => {
+  it("calls shell.showItemInFolder with the sanitized path", async () => {
+    const target = path.join(
+      TMP_ROOT,
+      "candidatures",
+      "doctolib_dev",
+      "resume.pdf",
+    );
+
+    const res = (await invoke(Channels.SHELL_SHOW_ITEM_IN_FOLDER, {
+      path: target,
+    })) as { success: boolean; error?: string };
+
+    expect(res.success).toBe(true);
+    expect(mockShowItemInFolder).toHaveBeenCalledWith(target);
+  });
+
+  it("returns an error response for an invalid/empty path", async () => {
+    const res = (await invoke(Channels.SHELL_SHOW_ITEM_IN_FOLDER, {
+      path: "",
+    })) as { success: boolean; error?: string };
+
+    expect(res.success).toBe(false);
+    expect(res.error).toBeTruthy();
   });
 });

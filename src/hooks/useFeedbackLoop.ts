@@ -4,10 +4,21 @@ import { Resume } from "@/../shared/resume-types";
 import {
   SectionComment,
   buildRegenerationMessage,
-  buildValidationMessage,
 } from "@/../shared/feedbackMessages";
 import { diffResumes, ResumeFieldChange } from "@/../shared/resumeDiff";
 import { mergeScopedResume } from "@/../shared/resumeMerge";
+
+/**
+ * Result of a successful deterministic Valider write (`resume:generate-final`),
+ * surfaced by `FeedbackModal`'s success panel. `warning` carries the
+ * partial-PDF-failure message (HTML written, PDF generation failed) — when
+ * set, `pdfPath` is absent.
+ */
+export interface ValidationResult {
+  htmlPath?: string;
+  pdfPath?: string;
+  warning?: string;
+}
 
 interface UseFeedbackLoopOptions {
   /** Selected theme used for the themed preview render. */
@@ -18,13 +29,25 @@ interface UseFeedbackLoopOptions {
    */
   initialResume: Resume | null;
   /**
+   * Company/position captured from the SAME `render_resume_html` call that
+   * produced `initialResume` (when the model supplied them). Seeds the hook's
+   * own `company`/`position` state on the SAME reseed guard as
+   * `initialResume`.
+   */
+  initialCompany?: string;
+  initialPosition?: string;
+  /**
    * Continue the SAME chat conversation with a feedback message and return the
    * new tailored resume (provided by `useChat` — the loop runs in the main
-   * window, not a second BrowserWindow).
+   * window, not a second BrowserWindow). Only used for regeneration rounds
+   * (`submitComments`) — Valider no longer goes through the chat loop.
    */
-  sendFeedbackMessage: (
-    content: string,
-  ) => Promise<{ resume: Resume | null; error?: string }>;
+  sendFeedbackMessage: (content: string) => Promise<{
+    resume: Resume | null;
+    error?: string;
+    company?: string;
+    position?: string;
+  }>;
   /** Persist the validated resume (existing `useResume` auto-save owner). */
   onValidated: (resume: Resume) => void;
   /** Close the modal. */
@@ -36,19 +59,26 @@ interface UseFeedbackLoopOptions {
  * the main window as a modal overlay (single-window design — the earlier
  * second-`BrowserWindow` approach was dropped as it was unreliable). The hook
  * holds ephemeral draft comments + the current tailored resume + rendered
- * preview, and drives regeneration/validation by continuing the SAME chat
- * conversation via `sendFeedbackMessage`.
+ * preview, drives REGENERATION rounds by continuing the SAME chat conversation
+ * via `sendFeedbackMessage`, and drives the final VALIDATION write
+ * deterministically via the `resume:generate-final` IPC channel (no LLM
+ * round-trip).
  *
- * - `initialResume` seeds the resume when the modal opens.
+ * - `initialResume`/`initialCompany`/`initialPosition` seed the loop when the
+ *   modal opens; `company`/`position` retain the LATEST non-empty values
+ *   across regeneration rounds within a session.
  * - `submitComments` compiles the PII-free French message, sends it through the
  *   chat loop, and on success applies a deterministic section-scoped merge
  *   (`mergeScopedResume`) — only commented sections come from the LLM, the rest
  *   (incl. all `basics` PII / `meta` / unknown keys) stay from the pre-regen
  *   resume — then clears comments (AC-7); on error preserves comments and
  *   unlocks (AC-12).
- * - `validate` sends the French validation message (triggers
- *   `generate_resume_files`), persists the resume, then closes the modal
- *   exactly once on success; on error the modal stays open and is retryable.
+ * - `validate` calls `resume:generate-final` DIRECTLY (no chat loop at all):
+ *   blocked (company/position empty) sets an inline French error and makes no
+ *   IPC call; an IPC error/`success: false` sets an inline French error and
+ *   stays open/retryable; on `success: true` it persists the resume
+ *   (`onValidated`) WITHOUT closing the modal, exposing `validationResult` so
+ *   `FeedbackModal` can render the success state + "reveal in folder" action.
  * - `changes` holds the leaf-field diff between the previous and the MERGED
  *   resume for the latest regeneration round (in-modal display only — PII-safe,
  *   never sent into a prompt). `lastRoundCommentedIds` lists the section ids
@@ -58,6 +88,8 @@ interface UseFeedbackLoopOptions {
 export function useFeedbackLoop({
   selectedTheme,
   initialResume,
+  initialCompany,
+  initialPosition,
   sendFeedbackMessage,
   onValidated,
   onClose,
@@ -73,6 +105,15 @@ export function useFeedbackLoop({
   const [lastRoundCommentedIds, setLastRoundCommentedIds] = useState<string[]>(
     [],
   );
+  // Latest non-empty company/position known for this modal session (AC-4).
+  const [company, setCompany] = useState<string | undefined>(initialCompany);
+  const [position, setPosition] = useState<string | undefined>(
+    initialPosition,
+  );
+  // Set on a successful `validate()`; cleared on reseed or the next
+  // regeneration round (a further round invalidates the prior validation).
+  const [validationResult, setValidationResult] =
+    useState<ValidationResult | null>(null);
 
   /**
    * The `initialResume` reference already seeded into the loop. Guards the
@@ -93,8 +134,11 @@ export function useFeedbackLoop({
       setError(null);
       setChanges([]);
       setLastRoundCommentedIds([]);
+      setCompany(initialCompany);
+      setPosition(initialPosition);
+      setValidationResult(null);
     }
-  }, [initialResume]);
+  }, [initialResume, initialCompany, initialPosition]);
 
   const setComment = useCallback((sectionId: string, value: string) => {
     setComments((prev) => ({ ...prev, [sectionId]: value }));
@@ -168,10 +212,17 @@ export function useFeedbackLoop({
     setError(null);
     setChanges([]);
     setLastRoundCommentedIds([]);
+    // A further regeneration round invalidates any prior successful validation.
+    setValidationResult(null);
     setIsRegenerating(true);
     try {
       const message = buildRegenerationMessage(toSend);
-      const { resume: updated, error: err } = await sendFeedbackMessage(message);
+      const {
+        resume: updated,
+        error: err,
+        company: roundCompany,
+        position: roundPosition,
+      } = await sendFeedbackMessage(message);
       if (err) {
         // Preserve comments so the user can retry without re-typing.
         setError(err);
@@ -190,6 +241,10 @@ export function useFeedbackLoop({
             .map((c) => c.sectionId),
         );
       }
+      // Retain the LATEST non-empty company/position across rounds (AC-4):
+      // only override when the round's result actually supplied one.
+      if (roundCompany) setCompany(roundCompany);
+      if (roundPosition) setPosition(roundPosition);
       setRound((prev) => prev + 1);
       setComments({});
     } catch (err: unknown) {
@@ -200,30 +255,75 @@ export function useFeedbackLoop({
   }, [pendingComments, isRegenerating, sendFeedbackMessage, resume]);
 
   /**
-   * Validate: send the French validation message (triggers
-   * `generate_resume_files`), persist the resume, then close the modal (AC-9).
-   * Retryable on error — the modal stays open.
+   * Validate: write the final HTML/PDF DETERMINISTICALLY via
+   * `resume:generate-final` — no `sendFeedbackMessage`/`ai:chat` call at all
+   * (AC-8, AC-12). Three outcomes:
+   * - **Blocked**: `company`/`position` empty/blank — sets an inline French
+   *   error, makes NO IPC call, does NOT call `onValidated`, stays open and
+   *   retryable (AC-9).
+   * - **Error**: the IPC call resolves `success: false` or rejects — sets an
+   *   inline French error, stays open and retryable (AC-10).
+   * - **Success**: calls `onValidated(resume)` (existing persistence
+   *   contract), does NOT call `onClose()`, and sets `validationResult` so
+   *   `FeedbackModal` can render the success panel + reveal action (AC-11).
+   * The existing `isRegenerating` lock guards against rapid/duplicate clicks
+   * (AC-18), reused unchanged from the regeneration-round guard.
    */
   const validate = useCallback(async () => {
     if (!resume || isRegenerating) return;
 
     setError(null);
+    setValidationResult(null);
+
+    if (!company?.trim() || !position?.trim()) {
+      setError(
+        "Impossible de déterminer l'entreprise et le poste pour cette candidature. " +
+          "Relancez une proposition de CV (le modèle doit préciser l'entreprise et " +
+          "le poste) avant de valider.",
+      );
+      return;
+    }
+
     setIsRegenerating(true);
     try {
-      const message = buildValidationMessage();
-      const { resume: updated, error: err } = await sendFeedbackMessage(message);
-      if (err) {
-        setError(err);
+      const response = await window.api.invoke(Channels.RESUME_GENERATE_FINAL, {
+        resumeJson: resume,
+        company,
+        position,
+        themeName: selectedTheme,
+      });
+
+      if (!response.success) {
+        setError(
+          response.error ||
+            "La génération du CV a échoué. Veuillez réessayer.",
+        );
         return;
       }
-      onValidated(updated ?? resume);
-      onClose();
+
+      onValidated(resume);
+      setValidationResult({
+        htmlPath: response.htmlPath,
+        pdfPath: response.pdfPath,
+        warning: response.pdfPath ? undefined : response.error,
+      });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsRegenerating(false);
     }
-  }, [resume, isRegenerating, sendFeedbackMessage, onValidated, onClose]);
+  }, [resume, isRegenerating, company, position, selectedTheme, onValidated]);
+
+  /**
+   * "Reveal in folder": no-ops if there is no successful `validationResult` or
+   * neither path is set; otherwise invokes `shell:show-item-in-folder` with
+   * the PDF path if present, else the HTML path (AC-14).
+   */
+  const revealInFolder = useCallback(() => {
+    const path = validationResult?.pdfPath ?? validationResult?.htmlPath;
+    if (!path) return;
+    void window.api.invoke(Channels.SHELL_SHOW_ITEM_IN_FOLDER, { path });
+  }, [validationResult]);
 
   return {
     resume,
@@ -236,10 +336,12 @@ export function useFeedbackLoop({
     changes,
     lastRoundCommentedIds,
     hasComments,
+    validationResult,
     setComment,
     clearComment,
     submitComments,
     validate,
+    revealInFolder,
     close: onClose,
   };
 }

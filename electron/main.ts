@@ -8,6 +8,7 @@ import {
   ipcMain,
   IpcMainInvokeEvent,
   dialog,
+  shell,
 } from "electron";
 import path from "path";
 import fs from "fs";
@@ -24,6 +25,7 @@ import { updateElectronApp } from "update-electron-app";
 import { processImage } from "./utils/image-processor";
 import { IPCError, validateAndSanitizePath } from "./lib/paths";
 import { detectsAuthRequired } from "./lib/auth-detect";
+import { deriveCandidatureFolderSegment } from "./lib/candidature-folder";
 
 // Only check for updates in production
 if (app.isPackaged) {
@@ -452,6 +454,95 @@ ipcMain.handle(
   },
 );
 
+// Deterministic Valider write: reached directly from the renderer (no LLM
+// round-trip). Derives the destination folder from raw `company`/`position`
+// SERVER-SIDE (the sanitizer, not the renderer, performs the derivation —
+// AC-6/AC-7), builds the SAME relative `candidatures/<segment>/resume.html` /
+// `.../resume.pdf` paths the `generate_resume_files` tool already uses, and
+// calls the SAME shared `generateResumeArtifacts` render/write/PII-restore
+// helper as that tool (AC-5).
+ipcMain.handle(
+  Channels.RESUME_GENERATE_FINAL,
+  async (
+    _event,
+    {
+      resumeJson,
+      company,
+      position,
+      themeName,
+    }: {
+      resumeJson: Resume;
+      company: string;
+      position: string;
+      themeName?: string;
+    },
+  ) => {
+    try {
+      const segment = deriveCandidatureFolderSegment(company, position);
+      const htmlPath = `candidatures/${segment}/resume.html`;
+      const pdfPath = `candidatures/${segment}/resume.pdf`;
+
+      // `sourceBasics: resumeJson.basics` is a deliberate, literal no-op
+      // restore, not a separate "true source resume" needing new plumbing: by
+      // construction, `resumeJson.basics` here already carries the candidate's
+      // TRUE PII by the time Valider is clicked — every `render_resume_html`
+      // call already restored it from the canonical source resume, and
+      // `mergeScopedResume` never lets a regeneration round replace `basics`
+      // with anything but the pre-regen value. Passing it through still
+      // executes the IDENTICAL `restoreBasicsPii` code path that
+      // `generate_resume_files` uses (with the real source `basics`),
+      // satisfying AC-5's "reuses the SAME … `restoreBasicsPii` code path".
+      const genResult = await generateResumeArtifacts({
+        resumeJson,
+        sourceBasics: resumeJson.basics,
+        htmlPath,
+        pdfPath,
+        themeName,
+      });
+
+      if (!genResult.success) {
+        return { success: false, error: genResult.error };
+      }
+
+      // Partial success (HTML written, PDF failed): mirror
+      // `generate_resume_files`'s shape — success: true, htmlPath set, error
+      // populated from the PDF failure.
+      return {
+        success: true,
+        htmlPath: genResult.htmlPath,
+        pdfPath: genResult.pdfPath ?? undefined,
+        error: genResult.pdfError,
+      };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return {
+        success: false,
+        error: message,
+      };
+    }
+  },
+);
+
+// "Reveal in folder": thin wrapper around Electron's `shell.showItemInFolder`.
+// The path passed in is always an absolute path this app itself previously
+// returned (from `resume:generate-final`), so this mirrors the existing
+// "trusted absolute path" handling `validateAndSanitizePath` already applies
+// elsewhere in this file (e.g. `DIALOG_SELECT_FOLDER`/`DIALOG_SELECT_FILE`
+// results).
+ipcMain.handle(
+  Channels.SHELL_SHOW_ITEM_IN_FOLDER,
+  async (_event, { path: itemPath }: { path: string }) => {
+    try {
+      const safePath = validateAndSanitizePath(itemPath, USER_DATA_PATH);
+      shell.showItemInFolder(safePath);
+      return { success: true };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { success: false, error: message };
+    }
+  },
+);
+
 async function readFile({ filePath }: { filePath: string }) {
   try {
     const safePath = validateAndSanitizePath(filePath, USER_DATA_PATH);
@@ -507,6 +598,119 @@ function restoreBasicsPii(
   return merged;
 }
 
+/**
+ * Render a resume to HTML, write it, then generate + write the PDF from that
+ * HTML file — restoring the true PII fields from `sourceBasics` onto
+ * `resumeJson.basics` first (see `restoreBasicsPii`). Shared by the
+ * `generate_resume_files` agent tool case AND the deterministic
+ * `resume:generate-final` IPC handler so both call sites share exactly one
+ * render/write/PII-restore implementation (no duplication/drift).
+ *
+ * Returns the SAME rich result shape the `generate_resume_files` tool has
+ * always returned (`success`, `message`/`warning`/`pdfError`/`htmlPath`/
+ * `pdfPath`/`htmlSize`/`error`), unchanged from before this function existed —
+ * callers map it to whatever shape they need to return.
+ */
+async function generateResumeArtifacts({
+  resumeJson,
+  sourceBasics,
+  htmlPath,
+  pdfPath,
+  themeName,
+}: {
+  resumeJson: Resume;
+  sourceBasics: ResumeBasics | undefined;
+  htmlPath: string;
+  pdfPath: string;
+  themeName?: string;
+}): Promise<{
+  success: boolean;
+  message?: string;
+  warning?: string;
+  htmlPath?: string;
+  pdfPath?: string | null;
+  htmlSize?: number;
+  error?: string;
+  pdfError?: string;
+}> {
+  // Restore ONLY the true PII fields (name/email/phone/url/image/location/
+  // profiles) from the source resume; PRESERVE the model-tailored
+  // `summary`/`label` from the proposal so profile/summary feedback takes
+  // effect in the final HTML+PDF. See restoreBasicsPii / prompt.ts.
+  if (sourceBasics && resumeJson) {
+    resumeJson.basics = restoreBasicsPii(sourceBasics, resumeJson.basics);
+  }
+
+  try {
+    // Step 1: Generate HTML
+    const html = await renderResume({
+      resumeJson,
+      themeName: themeName || "modern-sidebar",
+    });
+
+    // Step 2: Save HTML to file
+    const htmlWriteResult = await writeFile({
+      filePath: htmlPath,
+      content: html,
+    });
+
+    if (!htmlWriteResult.success) {
+      return {
+        success: false,
+        error: "Failed to save HTML file",
+      };
+    }
+
+    // Step 3: Generate PDF from HTML file
+    let pdfWriteResult:
+      | { success: boolean; path?: string; error?: string }
+      | undefined;
+    let pdfError: string | undefined;
+
+    try {
+      pdfWriteResult = await generatePdf({
+        htmlPath,
+        pdfPath,
+      });
+
+      if (!pdfWriteResult.success) {
+        pdfError = pdfWriteResult.error;
+      }
+    } catch (pdfErr: unknown) {
+      const pdfMessage =
+        pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
+      pdfError = pdfMessage;
+    }
+
+    // Partial success: HTML saved but PDF failed
+    if (pdfError) {
+      return {
+        success: true,
+        warning: `HTML created but PDF generation failed: ${pdfError}`,
+        htmlPath: htmlWriteResult.path,
+        htmlSize: html.length,
+        pdfPath: null,
+        pdfError: pdfError,
+      };
+    }
+
+    // Full success: Both HTML and PDF created
+    return {
+      success: true,
+      message: "Resume HTML and PDF generated successfully",
+      htmlPath: htmlWriteResult.path,
+      pdfPath: pdfWriteResult?.path || null,
+      htmlSize: html.length,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      success: false,
+      error: `Resume generation failed: ${message}`,
+    };
+  }
+}
+
 async function executeTool(
   name: string,
   args: any,
@@ -518,10 +722,14 @@ async function executeTool(
   result: unknown;
   updatedResume?: Resume;
   updatedConfig?: CandidatureConfig;
+  company?: string;
+  position?: string;
 }> {
   let result: unknown;
   let updatedResume: Resume | undefined;
   let updatedConfig: CandidatureConfig | undefined;
+  let company: string | undefined;
+  let position: string | undefined;
 
   switch (name) {
     case "write_file":
@@ -531,93 +739,21 @@ async function executeTool(
       result = await readFile(args);
       break;
     case "generate_resume_files":
-      // Restore ONLY the true PII fields (name/email/phone/url/image/location/
-      // profiles) from the source resume; PRESERVE the model-tailored
-      // `summary`/`label` from the proposal so profile/summary feedback takes
-      // effect in the final HTML+PDF. See restoreBasicsPii / prompt.ts.
-      if (sourceResume?.basics && args.resumeJson) {
-        args.resumeJson.basics = restoreBasicsPii(
-          sourceResume.basics,
-          args.resumeJson.basics,
-        );
-      }
-
-      try {
-        // Step 1: Generate HTML
-        const html = await renderResume({
-          resumeJson: args.resumeJson,
-          themeName: selectedTheme || "modern-sidebar",
-        });
-
-        // Step 2: Save HTML to file
-        const htmlWriteResult = await writeFile({
-          filePath: args.htmlPath,
-          content: html,
-        });
-
-        if (!htmlWriteResult.success) {
-          result = {
-            success: false,
-            error: "Failed to save HTML file",
-          };
-          break;
-        }
-
-        // Step 3: Generate PDF from HTML file
-        let pdfWriteResult:
-          | { success: boolean; path?: string; error?: string }
-          | undefined;
-        let pdfError: string | undefined;
-
-        try {
-          pdfWriteResult = await generatePdf({
-            htmlPath: args.htmlPath,
-            pdfPath: args.pdfPath,
-          });
-
-          if (!pdfWriteResult.success) {
-            pdfError = pdfWriteResult.error;
-          }
-        } catch (pdfErr: unknown) {
-          const pdfMessage =
-            pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
-          pdfError = pdfMessage;
-        }
-
-        // Partial success: HTML saved but PDF failed
-        if (pdfError) {
-          result = {
-            success: true,
-            warning: `HTML created but PDF generation failed: ${pdfError}`,
-            htmlPath: htmlWriteResult.path,
-            htmlSize: html.length,
-            pdfPath: null,
-            pdfError: pdfError,
-          };
-        } else {
-          // Full success: Both HTML and PDF created
-          result = {
-            success: true,
-            message: "Resume HTML and PDF generated successfully",
-            htmlPath: htmlWriteResult.path,
-            pdfPath: pdfWriteResult?.path || null,
-            htmlSize: html.length,
-          };
-        }
-
-        // NOTE: `generate_resume_files` is write-only and intentionally does NOT
-        // set `updatedResume`. It writes the HTML + PDF to disk and returns its
-        // result object. The feedback-modal trigger is the write-free
-        // `render_resume_html` tool (the CV-proposal step). This tool is invoked
-        // only after the user validates, so file generation cannot re-open the
-        // modal.
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        result = {
-          success: false,
-          error: `Resume generation failed: ${message}`,
-        };
-      }
+      // Thin wrapper around the shared render/write/PII-restore helper — output
+      // is byte-identical to the previous inline implementation (see
+      // `generateResumeArtifacts`). NOTE: `generate_resume_files` is write-only
+      // and intentionally does NOT set `updatedResume`. It writes the HTML + PDF
+      // to disk and returns its result object. The feedback-modal trigger is the
+      // write-free `render_resume_html` tool (the CV-proposal step). This tool
+      // is invoked only after the user validates, so file generation cannot
+      // re-open the modal.
+      result = await generateResumeArtifacts({
+        resumeJson: args.resumeJson,
+        sourceBasics: sourceResume?.basics,
+        htmlPath: args.htmlPath,
+        pdfPath: args.pdfPath,
+        themeName: selectedTheme,
+      });
       break;
     case "render_resume_html":
       // Write-free CV *proposal* step. Renders the tailored resume to HTML via
@@ -649,6 +785,17 @@ async function executeTool(
         };
         // In-memory only — no file written. This opens the feedback modal.
         updatedResume = args.resumeJson;
+        // `company`/`position` are plain, non-PII strings the model already
+        // knows from the job-offer context; captured here so they can be
+        // threaded back to the renderer (ai:chat response) and ultimately name
+        // the candidature folder at Valider time (deterministic write, no LLM
+        // involvement). Only captured when non-empty.
+        if (typeof args.company === "string" && args.company.trim()) {
+          company = args.company;
+        }
+        if (typeof args.position === "string" && args.position.trim()) {
+          position = args.position;
+        }
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         result = {
@@ -695,7 +842,7 @@ async function executeTool(
       result = { error: `Unknown tool: ${name}` };
   }
 
-  return { result, updatedResume, updatedConfig };
+  return { result, updatedResume, updatedConfig, company, position };
 }
 
 /**
@@ -724,6 +871,8 @@ async function runChatLoop(
   content: string;
   updatedResume: Resume | null;
   updatedConfig: CandidatureConfig | null;
+  company?: string;
+  position?: string;
 }> {
   const systemPrompt = GenerateSystemPrompt(ctx.candidature, ctx.resume);
 
@@ -734,6 +883,8 @@ async function runChatLoop(
   let candidature = ctx.candidature;
   let finalResume: Resume | null = null;
   let finalConfig: CandidatureConfig | null = null;
+  let finalCompany: string | undefined;
+  let finalPosition: string | undefined;
 
   const runTool = async (
     name: string,
@@ -745,14 +896,15 @@ async function runChatLoop(
       args: toolArgs,
     });
 
-    const { result, updatedResume, updatedConfig } = await executeTool(
-      name,
-      toolArgs,
-      event,
-      resume,
-      candidature,
-      ctx.selectedTheme,
-    );
+    const { result, updatedResume, updatedConfig, company, position } =
+      await executeTool(
+        name,
+        toolArgs,
+        event,
+        resume,
+        candidature,
+        ctx.selectedTheme,
+      );
 
     if (updatedResume) {
       finalResume = updatedResume;
@@ -761,6 +913,12 @@ async function runChatLoop(
     if (updatedConfig) {
       finalConfig = updatedConfig;
       candidature = updatedConfig; // Update for next tool calls
+    }
+    if (company) {
+      finalCompany = company;
+    }
+    if (position) {
+      finalPosition = position;
     }
 
     event.sender.send(Channels.TOOL_STATUS, {
@@ -790,6 +948,8 @@ async function runChatLoop(
     content,
     updatedResume: finalResume,
     updatedConfig: finalConfig,
+    company: finalCompany,
+    position: finalPosition,
   };
 }
 
@@ -797,15 +957,15 @@ ipcMain.handle(
   Channels.AI_CHAT,
   async (event: IpcMainInvokeEvent, args: ChatArgs) => {
     try {
-      const { content, updatedResume, updatedConfig } = await runChatLoop(
-        args,
-        event,
-      );
+      const { content, updatedResume, updatedConfig, company, position } =
+        await runChatLoop(args, event);
 
       return {
         content,
         updatedResume,
         updatedConfig,
+        company,
+        position,
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

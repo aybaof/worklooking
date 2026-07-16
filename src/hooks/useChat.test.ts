@@ -187,7 +187,38 @@ describe("useChat", () => {
     // The proposal (from write-free render_resume_html) is EPHEMERAL: only the
     // modal-open callback fires — nothing is persisted here. Persistence happens
     // only on Valider (useFeedbackLoop.validate → onValidated).
-    expect(onTailoredResume).toHaveBeenCalledWith(updatedResume);
+    expect(onTailoredResume).toHaveBeenCalledWith(
+      updatedResume,
+      undefined,
+      undefined,
+    );
+  });
+
+  it("fires onTailoredResume with company/position when ai:chat's response includes them (AC-2/AC-3)", async () => {
+    const onTailoredResume = vi.fn();
+    const updatedResume: Resume = { basics: { name: "Tailored" } };
+
+    api.invoke.mockResolvedValue({
+      content: "voici votre CV",
+      updatedResume,
+      company: "Doctolib",
+      position: "Développeur Fullstack",
+    });
+
+    const { result } = renderHook(() =>
+      useChat(baseOptions({ onTailoredResume })),
+    );
+    act(() => result.current.setInput("adapte mon CV"));
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    expect(onTailoredResume).toHaveBeenCalledWith(
+      updatedResume,
+      "Doctolib",
+      "Développeur Fullstack",
+    );
   });
 
   it("does not fire onTailoredResume when the turn has no updatedResume", async () => {
@@ -223,15 +254,28 @@ describe("useChat", () => {
     api.invoke.mockResolvedValueOnce({
       content: "CV mis à jour",
       updatedResume: regenResume,
+      company: "Doctolib",
+      position: "Développeur Fullstack",
     });
 
-    let outcome: { resume: Resume | null; error?: string } | undefined;
+    let outcome:
+      | {
+          resume: Resume | null;
+          error?: string;
+          company?: string;
+          position?: string;
+        }
+      | undefined;
     await act(async () => {
       outcome = await result.current.sendFeedbackMessage("- Compétences : ...");
     });
 
-    // Returns the new tailored resume.
-    expect(outcome).toEqual({ resume: regenResume });
+    // Returns the new tailored resume plus company/position when present.
+    expect(outcome).toEqual({
+      resume: regenResume,
+      company: "Doctolib",
+      position: "Développeur Fullstack",
+    });
 
     // The ai:chat call for the feedback turn carried the FULL prior history
     // plus the appended feedback user message (same conversation, not a fresh
@@ -308,7 +352,11 @@ describe("useChat", () => {
     expect(assistantMsg?.origin).not.toBe("feedback");
 
     // onTailoredResume still fires on a returned tailored resume.
-    expect(onTailoredResume).toHaveBeenCalledWith(updatedResume);
+    expect(onTailoredResume).toHaveBeenCalledWith(
+      updatedResume,
+      undefined,
+      undefined,
+    );
   });
 
   it("stamps streamed CHAT_UPDATE chunks of an in-flight feedback turn with origin 'feedback' (AC-1 streaming)", async () => {

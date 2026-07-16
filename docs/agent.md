@@ -13,7 +13,7 @@
 | `tools.ts` | OpenAI function-tool definitions the agent can call. |
 | `aiClient.ts` | `AiClientRouter` — provider adapters (OpenAI Chat Completions + Anthropic Messages) behind one interface; runs the chat/tool loop and connection tests. |
 
-The tools are executed by `executeTool()` in `electron/main.ts` (~L535). The chat loop
+The tools are executed by `executeTool()` in `electron/main.ts` (~L714). The chat loop
 itself is driven by `AiClientRouter` (`aiClient.ts`), which `main.ts` calls from the
 `ai:chat` handler and passes a `runTool` callback into. See `docs/ipc.md`.
 
@@ -30,7 +30,7 @@ Exactly 8 tools are defined, each with a **French** description:
 | `read_file` | Read a local file (relative or absolute path). |
 | `write_file` | Create/update a file in the user data dir (auto-creates parent dirs). |
 | `save_candidature_config` | Persist the full `CandidatureConfig` (profile/tracking). |
-| `render_resume_html` | **Propose** a tailored CV: render resume JSON → HTML **without writing any file**. Returns only a size/summary (not the full HTML) and sets `updatedResume` in-memory, which opens the feedback modal. The pre-validation proposal step. |
+| `render_resume_html` | **Propose** a tailored CV: render resume JSON → HTML **without writing any file**. Requires `company`/`position` (non-PII strings from the job-offer context) alongside `resumeJson` — they name the candidature folder automatically when the user later validates. Returns only a size/summary (not the full HTML) and sets `updatedResume` in-memory, which opens the feedback modal. The pre-validation proposal step. |
 | `generate_resume_files` | Render resume JSON → HTML + PDF at given paths (write-only). The final step, called only after the user validates. Does **not** set `updatedResume`. |
 | `save_source_resume` | Save the main source resume (base CV only). |
 | `fetch_url` | Fetch text content of a URL (persistent session; may return `needsAuth`). |
@@ -44,14 +44,20 @@ these exact 8 names and no others.
 The tailoring loop is a purely conversational, ephemeral proposal step — nothing is
 written to disk until the user validates:
 
-1. The agent **proposes** the tailored CV by calling `render_resume_html`, which renders
-   the HTML preview **without writing any file** and sets `updatedResume` (in-memory).
-2. `ai:chat` returns that `updatedResume`, which opens the in-app **feedback modal** where
-   the user reviews the proposal and can leave per-section comments (regeneration rounds
-   re-call `render_resume_html`, still write-free).
-3. On **Valider**, a confirmation message drives the agent to call `generate_resume_files`,
-   which writes the final HTML + PDF to disk; the resume is then persisted. See
-   `docs/ipc.md` → "CV feedback loop".
+1. The agent **proposes** the tailored CV by calling `render_resume_html` (now with
+   required `company`/`position`, in addition to `resumeJson`), which renders the HTML
+   preview **without writing any file** and sets `updatedResume` (in-memory). The
+   `company`/`position` values flow back to the renderer via `ai:chat`'s response.
+2. `ai:chat` returns that `updatedResume` (+ `company`/`position`), which opens the
+   in-app **feedback modal** where the user reviews the proposal and can leave
+   per-section comments (regeneration rounds re-call `render_resume_html`, still
+   write-free).
+3. On **Valider**, the app writes the final HTML + PDF **deterministically** —
+   directly from the renderer via the `resume:generate-final` IPC channel, with
+   NO LLM involvement — using the `company`/`position` captured in step 1/2 to
+   name the candidature folder; the resume is then persisted. `generate_resume_files`
+   remains available and unchanged for OTHER, non-Valider "generate files" requests a
+   user may make in free-form chat. See `docs/ipc.md` → "CV feedback loop".
 
 ## Adding an agent tool (workflow)
 

@@ -8,10 +8,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { installMockWindowApi } from "../../tests/renderer/mockWindowApi";
 import { Channels } from "@/../shared/ipc";
-import {
-  buildRegenerationMessage,
-  buildValidationMessage,
-} from "@/../shared/feedbackMessages";
+import { buildRegenerationMessage } from "@/../shared/feedbackMessages";
 import type { Resume } from "@/../shared/resume-types";
 import { useFeedbackLoop } from "./useFeedbackLoop";
 
@@ -146,143 +143,414 @@ describe("useFeedbackLoop (modal)", () => {
     expect(result.current.round).toBe(5);
   });
 
-  it("validate sends the French validation message, persists, then closes (AC-9)", async () => {
-    const finalResume: Resume = { basics: { summary: "Final" } };
-    const send = vi.fn().mockResolvedValue({ resume: finalResume });
-    const onValidated = vi.fn();
-    const onClose = vi.fn();
-    const { result } = renderHook(() =>
-      useFeedbackLoop(
-        makeOptions({ sendFeedbackMessage: send, onValidated, onClose }),
-      ),
-    );
+  describe("validate() — deterministic resume:generate-final flow", () => {
+    function makeOptionsWithCompany(
+      overrides: Partial<Parameters<typeof useFeedbackLoop>[0]> = {},
+    ) {
+      return makeOptions({
+        initialCompany: "Doctolib",
+        initialPosition: "Développeur Fullstack",
+        ...overrides,
+      });
+    }
 
-    await act(async () => {
-      await result.current.validate();
-    });
-
-    expect(send).toHaveBeenCalledWith(buildValidationMessage());
-    expect(onValidated).toHaveBeenCalledWith(finalResume);
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("Valider closes reliably: onValidated once + onClose exactly once on success (AC-5)", async () => {
-    const finalResume: Resume = { basics: { summary: "Final" } };
-    const send = vi.fn().mockResolvedValue({ resume: finalResume });
-    const onValidated = vi.fn();
-    const onClose = vi.fn();
-    const { result } = renderHook(() =>
-      useFeedbackLoop(
-        makeOptions({ sendFeedbackMessage: send, onValidated, onClose }),
-      ),
-    );
-
-    await act(async () => {
-      await result.current.validate();
-    });
-
-    expect(onValidated).toHaveBeenCalledTimes(1);
-    expect(onValidated).toHaveBeenCalledWith(finalResume);
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(result.current.error).toBeNull();
-  });
-
-  it("Valider falls back to the current resume when validation returns no updatedResume (AC-5)", async () => {
-    // generate_resume_files may return no resume; onValidated must still fire
-    // once with the current resume and onClose exactly once.
-    const send = vi.fn().mockResolvedValue({ resume: null });
-    const onValidated = vi.fn();
-    const onClose = vi.fn();
-    const { result } = renderHook(() =>
-      useFeedbackLoop(
-        makeOptions({ sendFeedbackMessage: send, onValidated, onClose }),
-      ),
-    );
-
-    await act(async () => {
-      await result.current.validate();
-    });
-
-    expect(onValidated).toHaveBeenCalledTimes(1);
-    expect(onValidated).toHaveBeenCalledWith(seedResume);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("Valider error keeps the modal open, sets error, and is retryable (AC-6)", async () => {
-    const send = vi
-      .fn()
-      .mockResolvedValueOnce({ resume: null, error: "provider down" })
-      .mockResolvedValueOnce({ resume: { basics: { summary: "OK" } } });
-    const onValidated = vi.fn();
-    const onClose = vi.fn();
-    const { result } = renderHook(() =>
-      useFeedbackLoop(
-        makeOptions({ sendFeedbackMessage: send, onValidated, onClose }),
-      ),
-    );
-
-    // First validate → error path.
-    await act(async () => {
-      await result.current.validate();
-    });
-    expect(result.current.error).toBe("provider down");
-    expect(onClose).not.toHaveBeenCalled();
-    expect(onValidated).not.toHaveBeenCalled();
-    expect(result.current.isRegenerating).toBe(false);
-
-    // A subsequent validate can be attempted and now succeeds.
-    await act(async () => {
-      await result.current.validate();
-    });
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(onValidated).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it("a returned updatedResume does NOT reopen/re-seed after a successful validate (AC-7)", async () => {
-    const updatedResume: Resume = {
-      basics: { summary: "Validé et régénéré" },
-    };
-    const send = vi.fn().mockResolvedValue({ resume: updatedResume });
-    const onValidated = vi.fn();
-    const onClose = vi.fn();
-    const { result, rerender } = renderHook(
-      (props: Parameters<typeof useFeedbackLoop>[0]) => useFeedbackLoop(props),
-      {
-        initialProps: makeOptions({
-          sendFeedbackMessage: send,
-          onValidated,
-          onClose,
-        }),
-      },
-    );
-
-    // Add a comment then validate successfully.
-    act(() => result.current.setComment("work", "un commentaire"));
-    await act(async () => {
-      await result.current.validate();
-    });
-    expect(onClose).toHaveBeenCalledTimes(1);
-
-    // Simulate the parent NOT changing initialResume (validation's updatedResume
-    // flows to useResume, not back into feedbackResume). The seededRef guard must
-    // prevent any re-seed even if the SAME initialResume reference re-renders.
-    act(() => {
-      rerender(
-        makeOptions({
-          sendFeedbackMessage: send,
-          onValidated,
-          onClose,
-          initialResume: seedResume,
-        }),
+    it("Blocked (AC-9): missing company/position sets an inline error, makes no IPC call, and does not call onValidated", async () => {
+      const onValidated = vi.fn();
+      const onClose = vi.fn();
+      const { result, rerender } = renderHook(
+        (props: Parameters<typeof useFeedbackLoop>[0]) => useFeedbackLoop(props),
+        { initialProps: makeOptions({ onValidated, onClose }) },
       );
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      expect(result.current.error).toBeTruthy();
+      expect(
+        api.invoke.mock.calls.some(
+          (c) => c[0] === Channels.RESUME_GENERATE_FINAL,
+        ),
+      ).toBe(false);
+      expect(onValidated).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Retryable: once a fresh tailoring turn supplies company/position (a new
+      // initialResume, since the hook only reseeds company/position alongside a
+      // NEW initialResume reference), Valider can succeed.
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({
+            success: true,
+            htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+            pdfPath: "/tmp/candidatures/doctolib_dev/resume.pdf",
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      const nextResume: Resume = { basics: { summary: "Reproposé" } };
+      act(() => {
+        rerender(
+          makeOptions({
+            onValidated,
+            onClose,
+            initialResume: nextResume,
+            initialCompany: "Doctolib",
+            initialPosition: "Développeur Fullstack",
+          }),
+        );
+      });
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      expect(result.current.error).toBeNull();
+      expect(onValidated).toHaveBeenCalledTimes(1);
+      expect(onValidated).toHaveBeenCalledWith(nextResume);
     });
 
-    // No re-seed happened: still one close, comments not wiped by a phantom
-    // reseed, round unchanged for the closed instance.
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(result.current.comments).toEqual({ work: "un commentaire" });
-    expect(result.current.round).toBe(0);
+    it("IPC error (AC-10): success:false response sets an inline error, stays retryable", async () => {
+      const onValidated = vi.fn();
+      const onClose = vi.fn();
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({ success: false, error: "boom" });
+        }
+        return Promise.resolve({});
+      });
+      const { result } = renderHook(() =>
+        useFeedbackLoop(makeOptionsWithCompany({ onValidated, onClose })),
+      );
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      expect(result.current.error).toBe("boom");
+      expect(onValidated).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(result.current.isRegenerating).toBe(false);
+
+      // A subsequent call is possible without remounting.
+      await act(async () => {
+        await result.current.validate();
+      });
+      const genCalls = api.invoke.mock.calls.filter(
+        (c) => c[0] === Channels.RESUME_GENERATE_FINAL,
+      );
+      expect(genCalls.length).toBe(2);
+    });
+
+    it("IPC error (AC-10): a rejected invoke also sets an inline error and stays retryable", async () => {
+      const onValidated = vi.fn();
+      const onClose = vi.fn();
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.reject(new Error("network down"));
+        }
+        return Promise.resolve({});
+      });
+      const { result } = renderHook(() =>
+        useFeedbackLoop(makeOptionsWithCompany({ onValidated, onClose })),
+      );
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      expect(result.current.error).toBe("network down");
+      expect(onValidated).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(result.current.isRegenerating).toBe(false);
+    });
+
+    it("Success (AC-11, AC-12): onValidated fires, onClose does NOT fire, validationResult is set, and no ai:chat call occurs", async () => {
+      const send = vi.fn().mockResolvedValue({ resume: null });
+      const onValidated = vi.fn();
+      const onClose = vi.fn();
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({
+            success: true,
+            htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+            pdfPath: "/tmp/candidatures/doctolib_dev/resume.pdf",
+          });
+        }
+        return Promise.resolve({});
+      });
+      const { result } = renderHook(() =>
+        useFeedbackLoop(
+          makeOptionsWithCompany({
+            sendFeedbackMessage: send,
+            onValidated,
+            onClose,
+          }),
+        ),
+      );
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      expect(onValidated).toHaveBeenCalledTimes(1);
+      expect(onValidated).toHaveBeenCalledWith(seedResume);
+      // Modal close is now a distinct user-initiated action.
+      expect(onClose).not.toHaveBeenCalled();
+      expect(result.current.validationResult).toEqual({
+        htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+        pdfPath: "/tmp/candidatures/doctolib_dev/resume.pdf",
+        warning: undefined,
+      });
+      // No LLM call during Valider's file-write step (AC-8/AC-12).
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        api.invoke.mock.calls.some((c) => c[0] === Channels.AI_CHAT),
+      ).toBe(false);
+
+      // A distinct close action is available and functional afterward.
+      act(() => result.current.close());
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("Company/position retained across rounds (AC-4): a round that omits them keeps the initial values", async () => {
+      const send = vi
+        .fn()
+        .mockResolvedValue({ resume: { basics: { summary: "R2" } } }); // no company/position
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({ success: true, htmlPath: "/tmp/h.html" });
+        }
+        return Promise.resolve({});
+      });
+      const { result } = renderHook(() =>
+        useFeedbackLoop(
+          makeOptionsWithCompany({ sendFeedbackMessage: send }),
+        ),
+      );
+
+      act(() => result.current.setComment("work", "change"));
+      await act(async () => {
+        await result.current.submitComments();
+      });
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      const genCall = api.invoke.mock.calls.find(
+        (c) => c[0] === Channels.RESUME_GENERATE_FINAL,
+      );
+      expect(genCall?.[1]).toMatchObject({
+        company: "Doctolib",
+        position: "Développeur Fullstack",
+      });
+    });
+
+    it("Company/position retained across rounds (AC-4): a round that supplies new values overrides them", async () => {
+      const send = vi.fn().mockResolvedValue({
+        resume: { basics: { summary: "R2" } },
+        company: "AutreEntreprise",
+        position: "Lead Dev",
+      });
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({ success: true, htmlPath: "/tmp/h.html" });
+        }
+        return Promise.resolve({});
+      });
+      const { result } = renderHook(() =>
+        useFeedbackLoop(
+          makeOptionsWithCompany({ sendFeedbackMessage: send }),
+        ),
+      );
+
+      act(() => result.current.setComment("work", "change"));
+      await act(async () => {
+        await result.current.submitComments();
+      });
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      const genCall = api.invoke.mock.calls.find(
+        (c) => c[0] === Channels.RESUME_GENERATE_FINAL,
+      );
+      expect(genCall?.[1]).toMatchObject({
+        company: "AutreEntreprise",
+        position: "Lead Dev",
+      });
+    });
+
+    it("Rapid double-click guard (AC-18): calling validate() twice without awaiting only invokes RESUME_GENERATE_FINAL once", async () => {
+      let resolveInvoke: (v: unknown) => void = () => {};
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return new Promise((resolve) => (resolveInvoke = resolve));
+        }
+        return Promise.resolve({});
+      });
+      const { result } = renderHook(() =>
+        useFeedbackLoop(makeOptionsWithCompany()),
+      );
+
+      // First call: runs synchronously up to the `await window.api.invoke(...)`
+      // (setting isRegenerating(true) before suspending), then this act() flushes
+      // that state update — mirroring the existing `isRegenerating` guard test's
+      // pattern ("locks while regenerating" above) so `result.current.validate`
+      // reflects the NEW render (isRegenerating: true) for the second call below.
+      let first: Promise<void>;
+      act(() => {
+        first = result.current.validate();
+      });
+      await waitFor(() => expect(result.current.isRegenerating).toBe(true));
+
+      // Second call while the first is still in flight: the guard's
+      // `isRegenerating` check now sees `true` and must no-op immediately.
+      let second: Promise<void>;
+      act(() => {
+        second = result.current.validate();
+      });
+
+      await act(async () => {
+        resolveInvoke({ success: true, htmlPath: "/tmp/h.html" });
+        await Promise.all([first, second]);
+      });
+
+      const genCalls = api.invoke.mock.calls.filter(
+        (c) => c[0] === Channels.RESUME_GENERATE_FINAL,
+      );
+      expect(genCalls.length).toBe(1);
+    });
+
+    it("revealInFolder (AC-14): invokes with the HTML path when only HTML is present", async () => {
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({
+            success: true,
+            htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+          });
+        }
+        return Promise.resolve({});
+      });
+      const { result } = renderHook(() =>
+        useFeedbackLoop(makeOptionsWithCompany()),
+      );
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      act(() => result.current.revealInFolder());
+
+      const revealCall = api.invoke.mock.calls.find(
+        (c) => c[0] === Channels.SHELL_SHOW_ITEM_IN_FOLDER,
+      );
+      expect(revealCall?.[1]).toEqual({
+        path: "/tmp/candidatures/doctolib_dev/resume.html",
+      });
+    });
+
+    it("revealInFolder (AC-14): invokes with the PDF path when both paths are present", async () => {
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({
+            success: true,
+            htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+            pdfPath: "/tmp/candidatures/doctolib_dev/resume.pdf",
+          });
+        }
+        return Promise.resolve({});
+      });
+      const { result } = renderHook(() =>
+        useFeedbackLoop(makeOptionsWithCompany()),
+      );
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      act(() => result.current.revealInFolder());
+
+      const revealCall = api.invoke.mock.calls.find(
+        (c) => c[0] === Channels.SHELL_SHOW_ITEM_IN_FOLDER,
+      );
+      expect(revealCall?.[1]).toEqual({
+        path: "/tmp/candidatures/doctolib_dev/resume.pdf",
+      });
+    });
+
+    it("a successful validate() does NOT reopen/re-seed the modal on an unrelated rerender (AC-7 regression)", async () => {
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({ success: true, htmlPath: "/tmp/h.html" });
+        }
+        return Promise.resolve({});
+      });
+      const onValidated = vi.fn();
+      const onClose = vi.fn();
+      const { result, rerender } = renderHook(
+        (props: Parameters<typeof useFeedbackLoop>[0]) => useFeedbackLoop(props),
+        {
+          initialProps: makeOptionsWithCompany({ onValidated, onClose }),
+        },
+      );
+
+      act(() => result.current.setComment("work", "un commentaire"));
+      await act(async () => {
+        await result.current.validate();
+      });
+      expect(onValidated).toHaveBeenCalledTimes(1);
+      expect(result.current.validationResult).not.toBeNull();
+
+      // Same initialResume reference re-renders (parent did not change it): the
+      // seededRef guard must prevent any re-seed / validationResult reset.
+      act(() => {
+        rerender(
+          makeOptionsWithCompany({
+            onValidated,
+            onClose,
+            initialResume: seedResume,
+          }),
+        );
+      });
+
+      expect(result.current.comments).toEqual({ work: "un commentaire" });
+      expect(result.current.round).toBe(0);
+      expect(result.current.validationResult).not.toBeNull();
+    });
   });
 
   it("populates `changes` from the round diff and never forwards diff values into the prompt (AC-11)", async () => {

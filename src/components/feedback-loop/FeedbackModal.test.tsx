@@ -39,10 +39,12 @@ function baseProps(overrides: Partial<Parameters<typeof FeedbackModal>[0]> = {})
     commentedSectionIds: [],
     activeTool: null,
     hasComments: false,
+    validationResult: null,
     setComment: vi.fn(),
     clearComment: vi.fn(),
     submitComments: vi.fn(),
     validate: vi.fn(),
+    onRevealInFolder: vi.fn(),
     onClose: vi.fn(),
     ...overrides,
   };
@@ -334,6 +336,73 @@ describe("FeedbackModal", () => {
 
     expect(screen.queryByTestId("unsaved-comments-confirm")).toBeNull();
     expect(validate).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the ValidationSuccessPanel with the given paths when validationResult is set (AC-14)", () => {
+    render(
+      <FeedbackModal
+        {...baseProps({
+          validationResult: {
+            htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+            pdfPath: "/tmp/candidatures/doctolib_dev/resume.pdf",
+          },
+        })}
+      />,
+    );
+
+    const panel = screen.getByTestId("validation-success-panel");
+    expect(panel).not.toBeNull();
+    // The path is a bare text node next to the "HTML :"/"PDF :" label <span>,
+    // so no single node's EXACT text equals just the path — substring match.
+    expect(
+      within(panel).getByText("/tmp/candidatures/doctolib_dev/resume.html", {
+        exact: false,
+      }),
+    ).not.toBeNull();
+    expect(
+      within(panel).getByText("/tmp/candidatures/doctolib_dev/resume.pdf", {
+        exact: false,
+      }),
+    ).not.toBeNull();
+  });
+
+  it("does not render the ValidationSuccessPanel when validationResult is null", () => {
+    render(<FeedbackModal {...baseProps({ validationResult: null })} />);
+    expect(screen.queryByTestId("validation-success-panel")).toBeNull();
+  });
+
+  it("clicking 'Afficher dans le dossier' calls onRevealInFolder (AC-14)", () => {
+    const onRevealInFolder = vi.fn();
+    render(
+      <FeedbackModal
+        {...baseProps({
+          validationResult: { htmlPath: "/tmp/resume.html" },
+          onRevealInFolder,
+        })}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Afficher dans le dossier/ }),
+    );
+    expect(onRevealInFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the amber warning text when validationResult.warning is set", () => {
+    render(
+      <FeedbackModal
+        {...baseProps({
+          validationResult: {
+            htmlPath: "/tmp/resume.html",
+            warning: "La génération du PDF a échoué.",
+          },
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText("La génération du PDF a échoué."),
+    ).not.toBeNull();
   });
 
   it("uses an in-app confirmation element, not window.confirm (AC-14)", () => {

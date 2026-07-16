@@ -22,9 +22,15 @@ interface UseChatOptions {
   /**
    * Called when a tailoring turn returns an `updatedResume`. The main renderer
    * uses this to open the in-app CV feedback modal (single-window design — the
-   * loop runs here, not in a second BrowserWindow).
+   * loop runs here, not in a second BrowserWindow). `company`/`position` (when
+   * the model supplied them to `render_resume_html`) are forwarded so
+   * `useFeedbackLoop` can seed the deterministic Valider write with them.
    */
-  onTailoredResume?: (resume: Resume) => void;
+  onTailoredResume?: (
+    resume: Resume,
+    company?: string,
+    position?: string,
+  ) => void;
 }
 
 export function useChat({
@@ -106,7 +112,8 @@ export function useChat({
    * Run one chat turn: append `userMessage`, invoke `ai:chat` continuing the
    * CURRENT conversation history, stream the assistant reply back into
    * `messages`, and apply resume/config updates. Returns the tailored
-   * `updatedResume` (if any) so callers can react (e.g. open the feedback
+   * `updatedResume` (if any), plus any `company`/`position` the model supplied
+   * to `render_resume_html`, so callers can react (e.g. open the feedback
    * modal). Shared by free-form chat (`handleSend`) and the feedback loop
    * (`sendFeedbackMessage`) so there is a single turn implementation.
    *
@@ -121,7 +128,11 @@ export function useChat({
     async (
       userMessage: Message,
       origin: MessageOrigin = "chat",
-    ): Promise<Resume | null> => {
+    ): Promise<{
+      resume: Resume | null;
+      company?: string;
+      position?: string;
+    }> => {
       currentTurnOriginRef.current = origin;
       const updatedMessages = [...messages, { ...userMessage, origin }];
       setMessages(updatedMessages);
@@ -166,7 +177,11 @@ export function useChat({
           });
         }
 
-        return response.updatedResume ?? null;
+        return {
+          resume: response.updatedResume ?? null,
+          company: response.company,
+          position: response.position,
+        };
       } finally {
         setIsTyping(false);
         currentTurnOriginRef.current = "chat";
@@ -198,14 +213,15 @@ export function useChat({
       setInput("");
 
       try {
-        const tailored = await runTurn(userMessage);
+        const { resume: tailored, company, position } =
+          await runTurn(userMessage);
         if (tailored) {
           // Open the feedback modal so the user can iterate on the proposal.
           // The proposal comes from the write-free `render_resume_html` tool and
           // is PURELY EPHEMERAL — nothing is persisted here. Persistence happens
-          // only when the user clicks Valider (`useFeedbackLoop.validate` →
-          // `onValidated`), which triggers the write-only `generate_resume_files`.
-          onTailoredResume?.(tailored);
+          // only when the user clicks Valider (`useFeedbackLoop.validate`),
+          // which now writes deterministically via `resume:generate-final`.
+          onTailoredResume?.(tailored, company, position);
         }
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -227,11 +243,19 @@ export function useChat({
   const sendFeedbackMessage = useCallback(
     async (
       content: string,
-    ): Promise<{ resume: Resume | null; error?: string }> => {
+    ): Promise<{
+      resume: Resume | null;
+      error?: string;
+      company?: string;
+      position?: string;
+    }> => {
       const userMessage: Message = { role: "user", content };
       try {
-        const tailored = await runTurn(userMessage, "feedback");
-        return { resume: tailored };
+        const { resume, company, position } = await runTurn(
+          userMessage,
+          "feedback",
+        );
+        return { resume, company, position };
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         setMessages((prev) => [

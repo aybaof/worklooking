@@ -3,12 +3,14 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Resume } from "@/../shared/resume-types";
 import { ResumeFieldChange } from "@/../shared/resumeDiff";
+import { ValidationResult } from "@/hooks/useFeedbackLoop";
 import { PreviewFrame } from "@/components/feedback-loop/PreviewFrame";
 import { SectionPinRail } from "@/components/feedback-loop/SectionPinRail";
 import { CommentPopover } from "@/components/feedback-loop/CommentPopover";
 import { RegenControls } from "@/components/feedback-loop/RegenControls";
 import { RoundDiffPanel } from "@/components/feedback-loop/RoundDiffPanel";
 import { UnsavedCommentsConfirm } from "@/components/feedback-loop/UnsavedCommentsConfirm";
+import { ValidationSuccessPanel } from "@/components/feedback-loop/ValidationSuccessPanel";
 
 interface FeedbackModalProps {
   resume: Resume | null;
@@ -23,10 +25,14 @@ interface FeedbackModalProps {
   commentedSectionIds: string[];
   activeTool: { name: string; status: string } | null;
   hasComments: boolean;
+  /** Result of the last successful Valider write, or `null` if none yet. */
+  validationResult: ValidationResult | null;
   setComment: (sectionId: string, value: string) => void;
   clearComment: (sectionId: string) => void;
   submitComments: () => void;
   validate: () => void;
+  /** Reveal the generated file (PDF if present, else HTML) in the file explorer. */
+  onRevealInFolder: () => void;
   onClose: () => void;
 }
 
@@ -48,10 +54,12 @@ export function FeedbackModal({
   commentedSectionIds,
   activeTool,
   hasComments,
+  validationResult,
   setComment,
   clearComment,
   submitComments,
   validate,
+  onRevealInFolder,
   onClose,
 }: FeedbackModalProps) {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
@@ -167,6 +175,13 @@ export function FeedbackModal({
               onRegenerate={submitComments}
               onValidate={handleValidate}
             />
+
+            {validationResult && (
+              <ValidationSuccessPanel
+                validationResult={validationResult}
+                onRevealInFolder={onRevealInFolder}
+              />
+            )}
 
             {round > 0 && (
               <RoundDiffPanel

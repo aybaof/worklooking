@@ -85,4 +85,19 @@ describe("agent tools contract", () => {
       expect(params?.properties).toBeTypeOf("object");
     }
   });
+
+  it("render_resume_html requires company and position string params (AC-1)", () => {
+    const tool = tools.find((t) => toolName(t) === "render_resume_html");
+    expect(tool?.type).toBe("function");
+    if (tool?.type !== "function") return;
+    const params = tool.function.parameters as {
+      properties?: Record<string, { type?: string }>;
+      required?: string[];
+    };
+    expect(params.required).toEqual(
+      expect.arrayContaining(["resumeJson", "company", "position"]),
+    );
+    expect(params.properties?.company?.type).toBe("string");
+    expect(params.properties?.position?.type).toBe("string");
+  });
 });

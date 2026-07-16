@@ -43,23 +43,3 @@ export function buildRegenerationMessage(comments: SectionComment[]): string {
     "Renvoie le CV mis à jour.",
   ].join("\n");
 }
-
-/**
- * Build the French validation message run through the `ai:chat` tool loop to
- * trigger the agent's `generate_resume_files` tool and produce the final
- * HTML + PDF.
- *
- * The wording is an EXPLICIT, FINAL confirmation: the system prompt
- * (`electron/agent/prompt.ts`) only allows `generate_resume_files` after the
- * user has explicitly validated, so this message must leave no room for the
- * agent to ask again — it instructs it to generate NOW and confirm once done.
- * PII-free (no resume field values).
- */
-export function buildValidationMessage(): string {
-  return (
-    "Je valide définitivement cette version du CV. " +
-    "Génère MAINTENANT les fichiers finaux (HTML et PDF) avec l'outil " +
-    "generate_resume_files, sans me redemander de confirmation, " +
-    "puis confirme-moi simplement que c'est terminé."
-  );
-}

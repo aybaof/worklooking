@@ -4,11 +4,7 @@
  * `node` Vitest project (`shared/**`).
  */
 import { describe, it, expect } from "vitest";
-import {
-  buildRegenerationMessage,
-  buildValidationMessage,
-  SectionComment,
-} from "./feedbackMessages";
+import { buildRegenerationMessage, SectionComment } from "./feedbackMessages";
 
 describe("buildRegenerationMessage", () => {
   it("emits the French 'Ajuste les sections suivantes' format with labels + comments (AC-15)", () => {
@@ -66,45 +62,6 @@ describe("buildRegenerationMessage", () => {
     ];
     const message = buildRegenerationMessage(comments);
 
-    for (const pii of piiValues) {
-      expect(message).not.toContain(pii);
-    }
-  });
-});
-
-describe("buildValidationMessage", () => {
-  it("produces a French validation message mentioning file generation (AC-9)", () => {
-    const message = buildValidationMessage();
-    expect(message.toLowerCase()).toContain("génère");
-    expect(message.toLowerCase()).toContain("fichiers");
-  });
-
-  it("is an explicit final confirmation: names the tool, HTML+PDF, and forbids re-asking (AC-9)", () => {
-    const message = buildValidationMessage();
-    const lower = message.toLowerCase();
-
-    // Explicit definitive validation so the agent does not ask again.
-    expect(lower).toContain("valide définitivement");
-    // Instructs the agent to act NOW.
-    expect(lower).toContain("maintenant");
-    // Names the exact tool and the two final artifacts.
-    expect(message).toContain("generate_resume_files");
-    expect(lower).toContain("html");
-    expect(lower).toContain("pdf");
-    // Leaves no room to re-ask for confirmation.
-    expect(lower).toContain("sans me redemander de confirmation");
-  });
-
-  it("contains NO PII field values (AC-15)", () => {
-    const message = buildValidationMessage();
-    const piiValues = [
-      "Jean Dupont",
-      "jean.dupont@example.com",
-      "+33 6 12 34 56 78",
-      "12 rue de Paris",
-      "https://linkedin.com/in/jeandupont",
-      "data:image/png;base64,AAAA",
-    ];
     for (const pii of piiValues) {
       expect(message).not.toContain(pii);
     }
