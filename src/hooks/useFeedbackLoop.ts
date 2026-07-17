@@ -70,6 +70,19 @@ interface UseFeedbackLoopOptions {
    * (`submitComments`), or `close()`.
    */
   onThemeValidated: (themeId: string) => void;
+  /**
+   * Called ONLY on a FULL `validate()` success — `response.pdfPath` present
+   * AND `response.error` absent (the SAME condition that triggers auto-close,
+   * AC-1). Lets `App.tsx` append the chat attachment message and run the
+   * candidature match-or-create write. Never called on partial success
+   * (warning set), blocked, error outcomes, `submitComments`, or `close()`.
+   */
+  onFullValidationSuccess?: (result: {
+    company: string;
+    position: string;
+    htmlPath: string;
+    pdfPath: string;
+  }) => void;
   /** Close the modal. */
   onClose: () => void;
 }
@@ -124,6 +137,7 @@ export function useFeedbackLoop({
   renderPreview,
   onValidated,
   onThemeValidated,
+  onFullValidationSuccess,
   onClose,
 }: UseFeedbackLoopOptions) {
   const [resume, setResume] = useState<Resume | null>(initialResume);
@@ -288,9 +302,13 @@ export function useFeedbackLoop({
    *   retryable (AC-9).
    * - **Error**: the IPC call resolves `success: false` or rejects — sets an
    *   inline French error, stays open and retryable (AC-10).
-   * - **Success**: calls `onValidated(resume)` (existing persistence
-   *   contract), does NOT call `onClose()`, and sets `validationResult` so
-   *   `FeedbackModal` can render the success panel + reveal action (AC-11).
+ * - **Success**: calls `onValidated(resume)` (existing persistence
+ *   contract) and sets `validationResult` so `FeedbackModal` can render the
+ *   success panel + reveal action (AC-11). On a FULL success (both
+ *   `htmlPath`/`pdfPath` present, no `error`) it additionally fires
+ *   `onFullValidationSuccess` and calls `onClose()` to auto-close the modal;
+ *   a PARTIAL success (`pdfPath` absent, `warning` set) does neither and
+ *   stays open exactly as before.
    * The existing `isRegenerating` lock guards against rapid/duplicate clicks
    * (AC-18), reused unchanged from the regeneration-round guard.
    */
@@ -333,6 +351,16 @@ export function useFeedbackLoop({
         warning: response.pdfPath ? undefined : response.error,
       });
       onThemeValidated(selectedTheme);
+
+      if (response.pdfPath && !response.error && response.htmlPath) {
+        onFullValidationSuccess?.({
+          company,
+          position,
+          htmlPath: response.htmlPath,
+          pdfPath: response.pdfPath,
+        });
+        onClose();
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -346,6 +374,8 @@ export function useFeedbackLoop({
     selectedTheme,
     onValidated,
     onThemeValidated,
+    onFullValidationSuccess,
+    onClose,
   ]);
 
   /**

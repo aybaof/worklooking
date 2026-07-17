@@ -31,6 +31,14 @@ All renderer↔main communication is typed and centralized in `shared/ipc.ts`.
 > VALIDATION ("Valider"), however, adds two new channels —
 > `resume:generate-final` and `shell:show-item-in-folder` — so the final write
 > never depends on the LLM deciding to call a tool. See the flow below.
+>
+> `shell:show-item-in-folder` was introduced for the feedback loop's own
+> "reveal in folder" action (`useFeedbackLoop.revealInFolder`) but is reused,
+> same channel/contract, by two more renderer call sites: the chat
+> resume-attachment card in `ChatPage` (`src/pages/chat.tsx`, rendered on a
+> full-success `validate()`) and `ApplicationsSection`'s per-row reveal
+> button (`src/components/candidature-editor/ApplicationsSection.tsx`, for
+> that row's persisted `resume_path`). No new channel was added for either.
 
 ## Events (`window.api.on`)
 
@@ -180,13 +188,31 @@ the existing conversation directly.
    - **Error**: `success: false` (or a rejected call) sets an inline French
      error; the modal stays open and Valider is retryable.
    - **Success**: `onValidated` persists the resume via
-     `useResume.setResumeByAi`, but the modal does **NOT** auto-close — a
-     `ValidationSuccessPanel` shows the written path(s) (plus any
-     partial-PDF-failure warning) and an "Afficher dans le dossier" button
-     (`revealInFolder`) that invokes the new `shell:show-item-in-folder`
-     channel with the PDF path if present, else the HTML path. Closing is now a
-     distinct user action. A further regeneration round clears the success
-     state (a new round invalidates the prior validation).
+     `useResume.setResumeByAi`. Two outcomes, depending on whether the PDF
+     write also succeeded:
+     - **Partial** (`pdfPath` absent, `error` carries a PDF-generation
+       warning): the modal does **NOT** auto-close — a
+       `ValidationSuccessPanel` shows the written path(s) plus the
+       partial-PDF-failure warning, and an "Afficher dans le dossier" button
+       (`revealInFolder`) that invokes `shell:show-item-in-folder` with the
+       HTML path. Closing is a distinct user action. A further regeneration
+       round clears the success state (a new round invalidates the prior
+       validation).
+     - **Full** (both `htmlPath` and `pdfPath` present, no `error`): the
+       modal **auto-closes** (`onClose()`), and `useFeedbackLoop` fires the
+       injected `onFullValidationSuccess({company, position, htmlPath,
+       pdfPath})` callback. `App.tsx` uses it to (1) append one new
+       assistant message to the SAME `useChat.messages` conversation
+       (`shared/resumeAttachmentMessage.ts`), rendered by `ChatPage` as a
+       distinct attachment card with its own "Afficher dans le dossier"
+       button (`shell:show-item-in-folder`, PDF path preferred), and (2) run
+       a match-or-create write against `candidature.config.applications`
+       (`shared/candidatureMatch.ts`): an entry matching the validated
+       `company`/`position` (trimmed, case-insensitive) has its
+       `resume_path` updated via the existing `updateItem`; otherwise a new
+       entry is appended via the existing `addItem` with sane defaults
+       (`status: "Envoyée"`, etc.). See `docs/state.md` for the hook option
+       and persistence details.
    Re-validating for the SAME `company`/`position` overwrites the same folder
    (no dated/duplicate folders), matching the existing one-folder-per-
    application convention.

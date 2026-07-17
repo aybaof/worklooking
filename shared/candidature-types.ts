@@ -30,5 +30,13 @@ export interface CandidatureConfig {
     status: string;
     follow_up: string;
     notes_path: string;
+    // Path to the generated CV (HTML/PDF) written by a full-success
+    // `validate()`, populated by `App.tsx`'s match-or-create wiring
+    // (`shared/candidatureMatch.ts`) — independent of `notes_path`. Declared
+    // non-optional per the spec, but `useCandidatureConfig.loadConfig` does an
+    // unchecked `JSON.parse(...) as CandidatureConfig` cast, so pre-existing
+    // persisted rows may have this key absent at runtime — all readers MUST
+    // treat it defensively (falsy/absent check).
+    resume_path: string;
   }>;
 }

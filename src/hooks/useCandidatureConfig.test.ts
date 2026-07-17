@@ -128,6 +128,7 @@ describe("useCandidatureConfig", () => {
         status: "",
         follow_up: "",
         notes_path: "",
+        resume_path: "",
       });
     });
     expect(result.current.config.applications).toHaveLength(1);
@@ -143,6 +144,75 @@ describe("useCandidatureConfig", () => {
       result.current.removeItem("applications", 0);
     });
     expect(result.current.config.applications).toHaveLength(0);
+  });
+
+  it("updateItem('applications', ..., 'resume_path', ...) changes ONLY resume_path (AC-12 field-isolation)", () => {
+    const { result } = renderHook(() => useCandidatureConfig());
+
+    act(() => {
+      result.current.addItem("applications", {
+        company: "Doctolib",
+        position: "Développeur Fullstack",
+        date: "2026-01-01",
+        status: "Envoyée",
+        follow_up: "Relance prévue",
+        notes_path: "/tmp/notes.txt",
+        resume_path: "/tmp/old-resume.pdf",
+      });
+    });
+
+    act(() => {
+      result.current.updateItem(
+        "applications",
+        0,
+        "resume_path",
+        "/tmp/new-resume.pdf",
+      );
+    });
+
+    expect(result.current.config.applications[0]).toEqual({
+      company: "Doctolib",
+      position: "Développeur Fullstack",
+      date: "2026-01-01",
+      status: "Envoyée",
+      follow_up: "Relance prévue",
+      notes_path: "/tmp/notes.txt",
+      resume_path: "/tmp/new-resume.pdf",
+    });
+  });
+
+  it("loading a persisted config whose applications[] entry has no resume_path key does not throw and leaves it undefined (AC-17, no backfill)", async () => {
+    const stored = {
+      candidate: {
+        name: "",
+        position: "",
+        location: "",
+        experience: "",
+        languages: [],
+        skills: [],
+        strengths: [],
+      },
+      goals: { salary_target: "", contract_type: "", remote_policy: "", criteria: [] },
+      target_companies: [],
+      applications: [
+        {
+          company: "Globex",
+          position: "Ingénieur",
+          date: "2025-01-01",
+          status: "Envoyée",
+          follow_up: "",
+          notes_path: "",
+          // resume_path deliberately absent — pre-migration persisted row.
+        },
+      ],
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
+
+    const { result } = renderHook(() => useCandidatureConfig());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.config.applications).toHaveLength(1);
+    expect(result.current.config.applications[0].resume_path).toBeUndefined();
   });
 
   it("autosave persists changes and clears the dirty flag", async () => {

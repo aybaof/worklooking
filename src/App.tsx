@@ -18,6 +18,11 @@ import { useCandidatureConfig } from "./hooks/useCandidatureConfig";
 import { useTemplateSelection } from "./hooks/useTemplateSelection";
 import { useTheme } from "./hooks/useTheme";
 import { Resume } from "@/../shared/resume-types";
+import { buildResumeAttachmentMessage } from "@/../shared/resumeAttachmentMessage";
+import {
+  findMatchingApplicationIndex,
+  buildDefaultApplication,
+} from "@/../shared/candidatureMatch";
 
 const pageVariants = {
   initial: {
@@ -82,6 +87,25 @@ export default function App() {
     renderPreview: templateSelection.renderPreview,
     onValidated: resume.setResumeByAi,
     onThemeValidated: templateSelection.setSelectedTheme,
+    onFullValidationSuccess: ({ company, position, htmlPath, pdfPath }) => {
+      chat.setMessages((prev) => [
+        ...prev,
+        buildResumeAttachmentMessage({ company, position, htmlPath, pdfPath }),
+      ]);
+      const idx = findMatchingApplicationIndex(
+        candidature.config.applications,
+        company,
+        position,
+      );
+      if (idx >= 0) {
+        candidature.updateItem("applications", idx, "resume_path", pdfPath);
+      } else {
+        candidature.addItem(
+          "applications",
+          buildDefaultApplication(company, position, pdfPath),
+        );
+      }
+    },
     onClose: () => setFeedbackResume(null),
   });
 

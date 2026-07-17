@@ -76,8 +76,13 @@ src/                      # Renderer (React 19 + react-router-dom)
    from the renderer via the new `resume:generate-final` IPC channel — no LLM
    round-trip — plus a `shell:show-item-in-folder` channel for the resulting
    "reveal in folder" action. The validated resume persists via
-   `useResume.setResumeByAi`. This replaced an earlier, unreliable
-   second-`BrowserWindow` design. See `docs/ipc.md`.
+   `useResume.setResumeByAi`. On a FULL success (both HTML/PDF paths present),
+   the modal auto-closes and `App.tsx` appends a resume-attachment message to
+   the SAME chat conversation plus a match-or-create write to
+   `candidature.config.applications[*].resume_path` (`onFullValidationSuccess`
+   — see below); a PARTIAL success (PDF failed) still leaves the modal open
+   with `ValidationSuccessPanel`, unchanged. This replaced an earlier,
+   unreliable second-`BrowserWindow` design. See `docs/ipc.md`.
 
    UX details of the loop:
    - **Hidden feedback turns.** Feedback-loop turns (regeneration/validation
@@ -147,10 +152,23 @@ src/                      # Renderer (React 19 + react-router-dom)
      click is **blocked** with an inline French error and no IPC call is made
      (the user must relaunch a CV proposal so the model supplies them); on an
      IPC error/`success: false`, an inline French error is shown and the modal
-     stays open/retryable; on success, `onValidated` persists the resume WITHOUT
-     closing the modal, and a `ValidationSuccessPanel` shows the written
-     path(s), any partial-PDF-failure warning, and an "Afficher dans le
-     dossier" button (`revealInFolder`, via `shell:show-item-in-folder`) that
-     picks the PDF path if present, else the HTML path. A further regeneration
-     round clears the success state (a new round invalidates the prior
-     validation). See `docs/ipc.md`.
+     stays open/retryable; `onValidated` always persists the resume via
+     `useResume.setResumeByAi`, but the modal's next state depends on WHICH kind
+     of success: a **partial** success (PDF write failed, `warning` set) leaves
+     the modal open with a `ValidationSuccessPanel` showing the written
+     path(s), the warning, and an "Afficher dans le dossier" button
+     (`revealInFolder`, via `shell:show-item-in-folder`) using the HTML path; a
+     **full** success (both HTML and PDF paths present, no error) instead
+     **auto-closes** the modal and fires the injected
+     `onFullValidationSuccess({company, position, htmlPath, pdfPath})`
+     callback, which `App.tsx` uses to (1) append one new assistant message to
+     the SAME `useChat.messages` conversation (`shared/resumeAttachmentMessage.ts`,
+     rendered by `ChatPage` as a distinct card with its own
+     `shell:show-item-in-folder` reveal button, PDF path preferred) and (2) run
+     a pure match-or-create decision (`shared/candidatureMatch.ts`) against
+     `candidature.config.applications` — updating the matched entry's
+     `resume_path` (trimmed/case-insensitive `company`+`position` match) via
+     the existing `updateItem`, or appending a new entry with sane defaults via
+     the existing `addItem` when none matches. A further regeneration round
+     clears the success state (a new round invalidates the prior validation).
+     See `docs/ipc.md`.

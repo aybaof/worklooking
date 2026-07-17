@@ -199,6 +199,7 @@ export default function CandidatureEditorPage({
                         status: "",
                         follow_up: "",
                         notes_path: "",
+                        resume_path: "",
                       })
                     }
                     onRemove={(i) => removeItem("applications", i)}

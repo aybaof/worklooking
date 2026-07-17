@@ -156,10 +156,17 @@ describe("useFeedbackLoop (modal)", () => {
     it("Blocked (AC-9): missing company/position sets an inline error, makes no IPC call, and does not call onValidated", async () => {
       const onValidated = vi.fn();
       const onClose = vi.fn();
+      const onFullValidationSuccess = vi.fn();
       const { result, rerender } = renderHook(
         (props: Parameters<typeof useFeedbackLoop>[0]) =>
           useFeedbackLoop(props),
-        { initialProps: makeOptions({ onValidated, onClose }) },
+        {
+          initialProps: makeOptions({
+            onValidated,
+            onClose,
+            onFullValidationSuccess,
+          }),
+        },
       );
 
       await act(async () => {
@@ -174,6 +181,9 @@ describe("useFeedbackLoop (modal)", () => {
       ).toBe(false);
       expect(onValidated).not.toHaveBeenCalled();
       expect(onClose).not.toHaveBeenCalled();
+      // AC-3: no chat message / applications write is triggered on the
+      // blocked path — the callback is the only trigger App.tsx uses.
+      expect(onFullValidationSuccess).not.toHaveBeenCalled();
 
       // Retryable: once a fresh tailoring turn supplies company/position (a new
       // initialResume, since the hook only reseeds company/position alongside a
@@ -217,6 +227,7 @@ describe("useFeedbackLoop (modal)", () => {
     it("IPC error (AC-10): success:false response sets an inline error, stays retryable", async () => {
       const onValidated = vi.fn();
       const onClose = vi.fn();
+      const onFullValidationSuccess = vi.fn();
       api.invoke.mockImplementation((channel: string) => {
         if (channel === Channels.RESUME_RENDER_PREVIEW) {
           return Promise.resolve({ html: "<div>preview</div>" });
@@ -226,7 +237,11 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const options = makeOptionsWithCompany({ onValidated, onClose });
+      const options = makeOptionsWithCompany({
+        onValidated,
+        onClose,
+        onFullValidationSuccess,
+      });
       const { result } = renderHook(() => useFeedbackLoop(options));
 
       await act(async () => {
@@ -236,6 +251,8 @@ describe("useFeedbackLoop (modal)", () => {
       expect(result.current.error).toBe("boom");
       expect(onValidated).not.toHaveBeenCalled();
       expect(onClose).not.toHaveBeenCalled();
+      // AC-3: no chat message / applications write on the error path.
+      expect(onFullValidationSuccess).not.toHaveBeenCalled();
       expect(result.current.isRegenerating).toBe(false);
 
       // A subsequent call is possible without remounting.
@@ -251,6 +268,7 @@ describe("useFeedbackLoop (modal)", () => {
     it("IPC error (AC-10): a rejected invoke also sets an inline error and stays retryable", async () => {
       const onValidated = vi.fn();
       const onClose = vi.fn();
+      const onFullValidationSuccess = vi.fn();
       api.invoke.mockImplementation((channel: string) => {
         if (channel === Channels.RESUME_RENDER_PREVIEW) {
           return Promise.resolve({ html: "<div>preview</div>" });
@@ -260,7 +278,11 @@ describe("useFeedbackLoop (modal)", () => {
         }
         return Promise.resolve({});
       });
-      const options = makeOptionsWithCompany({ onValidated, onClose });
+      const options = makeOptionsWithCompany({
+        onValidated,
+        onClose,
+        onFullValidationSuccess,
+      });
       const { result } = renderHook(() => useFeedbackLoop(options));
 
       await act(async () => {
@@ -270,13 +292,56 @@ describe("useFeedbackLoop (modal)", () => {
       expect(result.current.error).toBe("network down");
       expect(onValidated).not.toHaveBeenCalled();
       expect(onClose).not.toHaveBeenCalled();
+      // AC-3: no chat message / applications write on the rejected path.
+      expect(onFullValidationSuccess).not.toHaveBeenCalled();
       expect(result.current.isRegenerating).toBe(false);
     });
 
-    it("Success (AC-11, AC-12): onValidated fires, onClose does NOT fire, validationResult is set, and no ai:chat call occurs", async () => {
+    it("Partial success (AC-2): htmlPath only (no pdfPath) does not close the modal or fire onFullValidationSuccess", async () => {
+      const onValidated = vi.fn();
+      const onClose = vi.fn();
+      const onFullValidationSuccess = vi.fn();
+      api.invoke.mockImplementation((channel: string) => {
+        if (channel === Channels.RESUME_RENDER_PREVIEW) {
+          return Promise.resolve({ html: "<div>preview</div>" });
+        }
+        if (channel === Channels.RESUME_GENERATE_FINAL) {
+          return Promise.resolve({
+            success: true,
+            htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+            error: "La génération du PDF a échoué.",
+          });
+        }
+        return Promise.resolve({});
+      });
+      const options = makeOptionsWithCompany({
+        onValidated,
+        onClose,
+        onFullValidationSuccess,
+      });
+      const { result } = renderHook(() => useFeedbackLoop(options));
+
+      await act(async () => {
+        await result.current.validate();
+      });
+
+      expect(onValidated).toHaveBeenCalledTimes(1);
+      // Partial success (no pdfPath): modal stays open, no auto-close, no
+      // full-validation callback.
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onFullValidationSuccess).not.toHaveBeenCalled();
+      expect(result.current.validationResult).toEqual({
+        htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+        pdfPath: undefined,
+        warning: "La génération du PDF a échoué.",
+      });
+    });
+
+    it("Full success (AC-1, AC-4, AC-11): auto-closes and fires onFullValidationSuccess with company/position/htmlPath/pdfPath", async () => {
       const send = vi.fn().mockResolvedValue({ resume: null });
       const onValidated = vi.fn();
       const onClose = vi.fn();
+      const onFullValidationSuccess = vi.fn();
       api.invoke.mockImplementation((channel: string) => {
         if (channel === Channels.RESUME_RENDER_PREVIEW) {
           return Promise.resolve({ html: "<div>preview</div>" });
@@ -294,6 +359,7 @@ describe("useFeedbackLoop (modal)", () => {
         sendFeedbackMessage: send,
         onValidated,
         onClose,
+        onFullValidationSuccess,
       });
       const { result } = renderHook(() => useFeedbackLoop(options));
 
@@ -303,8 +369,15 @@ describe("useFeedbackLoop (modal)", () => {
 
       expect(onValidated).toHaveBeenCalledTimes(1);
       expect(onValidated).toHaveBeenCalledWith(seedResume);
-      // Modal close is now a distinct user-initiated action.
-      expect(onClose).not.toHaveBeenCalled();
+      // A FULL success (both paths present, no error) now auto-closes (AC-1).
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onFullValidationSuccess).toHaveBeenCalledTimes(1);
+      expect(onFullValidationSuccess).toHaveBeenCalledWith({
+        company: "Doctolib",
+        position: "Développeur Fullstack",
+        htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
+        pdfPath: "/tmp/candidatures/doctolib_dev/resume.pdf",
+      });
       expect(result.current.validationResult).toEqual({
         htmlPath: "/tmp/candidatures/doctolib_dev/resume.html",
         pdfPath: "/tmp/candidatures/doctolib_dev/resume.pdf",
@@ -315,10 +388,6 @@ describe("useFeedbackLoop (modal)", () => {
       expect(api.invoke.mock.calls.some((c) => c[0] === Channels.AI_CHAT)).toBe(
         false,
       );
-
-      // A distinct close action is available and functional afterward.
-      act(() => result.current.close());
-      expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it("Company/position retained across rounds (AC-4): a round that omits them keeps the initial values", async () => {

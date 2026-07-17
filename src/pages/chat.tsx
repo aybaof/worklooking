@@ -12,6 +12,7 @@ import {
   User,
   X,
   FileText,
+  FolderOpen,
   Wrench,
 } from "lucide-react";
 import { useState, Dispatch, RefObject, SetStateAction } from "react";
@@ -73,6 +74,7 @@ export default function ChatPage({
           .map((msg, i) => (
           <div
             key={i}
+            data-testid="chat-message"
             className={`flex ${
               msg.role === "user" ? "justify-end" : "justify-start"
             }`}
@@ -93,17 +95,62 @@ export default function ChatPage({
                   <Bot className="w-4 h-4" />
                 )}
               </div>
-              <Card
-                className={`${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card"
-                }`}
-              >
-                <CardContent className="p-3 text-sm whitespace-pre-wrap leading-relaxed">
-                  <Markdown>{msg.content}</Markdown>
-                </CardContent>
-              </Card>
+              {msg.attachment ? (
+                <Card
+                  data-testid="resume-attachment-card"
+                  className="border-2 border-primary/40 bg-primary/5"
+                >
+                  <CardContent className="p-3 text-sm space-y-2">
+                    <div className="flex items-center gap-2 font-medium">
+                      <FileText className="w-4 h-4 text-primary shrink-0" />
+                      <span>
+                        CV validé — {msg.attachment.position} chez{" "}
+                        {msg.attachment.company}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      {msg.attachment.pdfPath && (
+                        <div className="truncate">
+                          PDF : {msg.attachment.pdfPath}
+                        </div>
+                      )}
+                      {msg.attachment.htmlPath && (
+                        <div className="truncate">
+                          HTML : {msg.attachment.htmlPath}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const path =
+                          msg.attachment?.pdfPath ?? msg.attachment?.htmlPath;
+                        if (!path) return;
+                        void window.api.invoke(
+                          Channels.SHELL_SHOW_ITEM_IN_FOLDER,
+                          { path },
+                        );
+                      }}
+                    >
+                      <FolderOpen className="w-4 h-4 mr-2" />
+                      Afficher dans le dossier
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card
+                  className={`${
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card"
+                  }`}
+                >
+                  <CardContent className="p-3 text-sm whitespace-pre-wrap leading-relaxed">
+                    <Markdown>{msg.content}</Markdown>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         ))}
