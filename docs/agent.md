@@ -13,7 +13,7 @@
 | `tools.ts` | OpenAI function-tool definitions the agent can call. |
 | `aiClient.ts` | `AiClientRouter` — provider adapters (OpenAI Chat Completions + Anthropic Messages) behind one interface; runs the chat/tool loop and connection tests. |
 
-The tools are executed by `executeTool()` in `electron/main.ts` (~L714). The chat loop
+The tools are executed by `executeTool()` in `electron/main.ts` (~L981). The chat loop
 itself is driven by `AiClientRouter` (`aiClient.ts`), which `main.ts` calls from the
 `ai:chat` handler and passes a `runTool` callback into. See `docs/ipc.md`.
 
@@ -33,7 +33,7 @@ Exactly 8 tools are defined, each with a **French** description:
 | `render_resume_html` | **Propose** a tailored CV: render resume JSON → HTML **without writing any file**. Requires `company`/`position` (non-PII strings from the job-offer context) alongside `resumeJson` — they name the candidature folder automatically when the user later validates. Returns only a size/summary (not the full HTML) and sets `updatedResume` in-memory, which opens the feedback modal. The pre-validation proposal step. |
 | `generate_resume_files` | Render resume JSON → HTML + PDF at given paths (write-only). The final step, called only after the user validates. Does **not** set `updatedResume`. |
 | `save_source_resume` | Save the main source resume (base CV only). |
-| `fetch_url` | Fetch text content of a URL (persistent session; may return `needsAuth`). |
+| `fetch_url` | Fetch text content of a URL (persistent session). On a stuck/likely-login page, falls back to a visible browser window so the user can log in; clicking "Continuer" closes that window and re-checks the original page, returning its content. If login still isn't complete after that one re-check, fails with `FETCH_LOGIN_INCOMPLETE` (one shot, no retry loop); `needsAuth`/`FETCH_NEEDS_AUTH` is no longer returned for these cases (only genuine hard failures return an error immediately). |
 | `read_pdf` | Extract text from a PDF (absolute path). |
 
 Each has a matching `case` in `executeTool()` (`electron/main.ts`) — the switch handles

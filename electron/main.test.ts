@@ -1,9 +1,10 @@
 /**
  * Tier 1 — pure functions extracted from electron/main.ts
  *
- * `validateAndSanitizePath` (+ `IPCError`) and `detectsAuthRequired` were
- * extracted into `electron/lib/paths.ts` and `electron/lib/auth-detect.ts`
- * so they can be unit-tested without importing the whole Electron main
+ * `validateAndSanitizePath` (+ `IPCError`), `detectsAuthRequired`, and
+ * `shouldFallBackToVisible` were extracted into `electron/lib/paths.ts`,
+ * `electron/lib/auth-detect.ts`, and `electron/lib/fetch-fallback.ts` so
+ * they can be unit-tested without importing the whole Electron main
  * process. See tests/TEST_PLAN.md → "Tier 1: main.ts" and docs/architecture.md.
  */
 import path from "path";
@@ -11,6 +12,7 @@ import { describe, it, expect } from "vitest";
 import { ErrorCodes } from "../shared/ipc";
 import { IPCError, validateAndSanitizePath } from "./lib/paths";
 import { detectsAuthRequired } from "./lib/auth-detect";
+import { shouldFallBackToVisible } from "./lib/fetch-fallback";
 
 describe("validateAndSanitizePath", () => {
   const basePath = path.resolve("/base/dir");
@@ -113,6 +115,32 @@ describe("detectsAuthRequired", () => {
         "https://example.com/jobs/123",
         "Software Engineer — Example",
       ),
+    ).toBe(false);
+  });
+});
+
+describe("shouldFallBackToVisible", () => {
+  it("returns true when the hidden load timed out (AC-2)", () => {
+    expect(
+      shouldFallBackToVisible({ hiddenLoadTimedOut: true, needsAuth: false }),
+    ).toBe(true);
+  });
+
+  it("returns true when detectsAuthRequired flagged the page (AC-3)", () => {
+    expect(
+      shouldFallBackToVisible({ hiddenLoadTimedOut: false, needsAuth: true }),
+    ).toBe(true);
+  });
+
+  it("returns true when both the timeout and the auth heuristic fire", () => {
+    expect(
+      shouldFallBackToVisible({ hiddenLoadTimedOut: true, needsAuth: true }),
+    ).toBe(true);
+  });
+
+  it("returns false when neither reason applies — no regression to the happy path (AC-1)", () => {
+    expect(
+      shouldFallBackToVisible({ hiddenLoadTimedOut: false, needsAuth: false }),
     ).toBe(false);
   });
 });

@@ -24,6 +24,7 @@ import {
   beforeAll,
   afterAll,
   beforeEach,
+  afterEach,
 } from "vitest";
 import * as os from "os";
 import * as fs from "fs";
@@ -59,6 +60,113 @@ let mockPrintToPDFImpl: (...args: unknown[]) => unknown = () =>
 // Captures `shell.showItemInFolder` calls for the reveal-in-folder handler.
 const mockShowItemInFolder = vi.fn();
 
+// --- Mocked BrowserWindow for fetch_url's hidden→visible fallback tests ---
+//
+// `fetchUrl()`'s two phases (`attemptHiddenFetch`/`openVisibleFallbackWindow`,
+// see electron/main.ts) need a `BrowserWindow` mock that supports: an event
+// emitter on both the window itself (for `closed`) and `webContents` (for
+// `did-finish-load`/`did-navigate`/`did-navigate-in-page`), a controllable
+// per-instance `loadURL` (immediate resolve / never-resolve / reject, queued
+// in creation order via `mockLoadURLQueue`), and a controllable
+// `executeJavaScript` that answers the two scripts `main.ts` actually sends
+// (the continue-flag poll and the `document.body.innerText` extraction)
+// based on per-instance flags a test sets directly
+// (`webContents.__continueClicked` / `webContents.__mockContent`), keyed by
+// simple substring matching on the injected script text — no real DOM needed.
+// Mirrors this file's existing `mockPrintToPDFImpl` per-test-override pattern
+// (see tests/TEST_PLAN.md → Tier 4).
+type Listener = (...args: unknown[]) => void;
+
+// Marker string matching `FETCH_CONTINUE_FLAG` in electron/main.ts — kept as
+// a literal here (rather than imported) since `electron/main.ts` is the
+// module under test and importing from it would defeat the mock boundary.
+const CONTINUE_FLAG_MARKER = "__worklookingFetchContinueClicked";
+
+class MockWebContents {
+  send = vi.fn();
+  getTitle = vi.fn().mockResolvedValue("");
+  getURL = vi.fn().mockReturnValue("");
+  printToPDF = vi.fn((...args: unknown[]) => mockPrintToPDFImpl(...args));
+  // Test-controlled state read by the `executeJavaScript` mock below.
+  __continueClicked = false;
+  __mockContent = "";
+  private listeners: Array<{ event: string; cb: Listener }> = [];
+
+  executeJavaScript = vi.fn((script: string) => {
+    if (typeof script === "string" && script.includes(CONTINUE_FLAG_MARKER)) {
+      return Promise.resolve(this.__continueClicked === true);
+    }
+    if (typeof script === "string" && script.includes("document.body.innerText")) {
+      return Promise.resolve(this.__mockContent);
+    }
+    return Promise.resolve(undefined);
+  });
+
+  on(event: string, cb: Listener) {
+    this.listeners.push({ event, cb });
+  }
+
+  /** Test helper: fire a previously-registered `webContents.on(event, ...)` listener. */
+  __emit(event: string, ...args: unknown[]) {
+    this.listeners
+      .filter((l) => l.event === event)
+      .forEach((l) => l.cb(...args));
+  }
+}
+
+// FIFO queue of per-instance `loadURL` behaviors, popped in construction
+// order. Empty/undefined defaults to an immediate resolve (the common case
+// for tests that don't care about load timing).
+let mockLoadURLQueue: Array<() => Promise<void>> = [];
+
+// Every `BrowserWindow` constructed during a test, in creation order — lets
+// tests assert how many windows were created and inspect each one's
+// constructor args (security config, `show`/`partition`, etc.).
+let mockCreatedWindows: MockBrowserWindow[] = [];
+
+class MockBrowserWindow {
+  constructorArgs: Record<string, unknown>;
+  webContents = new MockWebContents();
+  loadFile = vi.fn();
+  close = vi.fn();
+  loadURL: ReturnType<typeof vi.fn>;
+  destroy = vi.fn(() => {
+    this.destroyed = true;
+  });
+  private destroyed = false;
+  private listeners: Array<{ event: string; cb: Listener }> = [];
+
+  constructor(args: Record<string, unknown>) {
+    this.constructorArgs = args;
+    const behavior = mockLoadURLQueue.shift() ?? (() => Promise.resolve());
+    this.loadURL = vi.fn(() => behavior());
+    mockCreatedWindows.push(this);
+  }
+
+  on(event: string, cb: Listener) {
+    this.listeners.push({ event, cb });
+  }
+
+  once(event: string, cb: Listener) {
+    const wrapped: Listener = (...args) => {
+      this.listeners = this.listeners.filter((l) => l.cb !== wrapped);
+      cb(...args);
+    };
+    this.listeners.push({ event, cb: wrapped });
+  }
+
+  isDestroyed(): boolean {
+    return this.destroyed;
+  }
+
+  /** Test helper: fire a previously-registered `win.on/once(event, ...)` listener. */
+  __emit(event: string, ...args: unknown[]) {
+    this.listeners
+      .filter((l) => l.event === event)
+      .forEach((l) => l.cb(...args));
+  }
+}
+
 // --- Mocks (hoisted before imports) ---
 vi.mock("electron", () => ({
   app: {
@@ -74,20 +182,7 @@ vi.mock("electron", () => ({
       handlers.set(channel, cb);
     },
   },
-  BrowserWindow: class {
-    webContents = {
-      send: vi.fn(),
-      loadURL: vi.fn(),
-      getTitle: vi.fn(),
-      getURL: vi.fn(),
-      executeJavaScript: vi.fn(),
-      printToPDF: vi.fn((...args: unknown[]) => mockPrintToPDFImpl(...args)),
-    };
-    loadURL = vi.fn();
-    loadFile = vi.fn();
-    close = vi.fn();
-    destroy = vi.fn();
-  },
+  BrowserWindow: MockBrowserWindow,
   dialog: {
     showOpenDialog: vi.fn(),
   },
@@ -193,6 +288,10 @@ beforeEach(() => {
   // Default: PDF generation succeeds with a minimal valid buffer.
   mockPrintToPDFImpl = () => Buffer.from("%PDF-1.4 fake pdf content for tests");
   mockShowItemInFolder.mockReset();
+  // Reset fetch_url's BrowserWindow mock bookkeeping so tests never leak
+  // windows/loadURL behaviors into one another.
+  mockCreatedWindows = [];
+  mockLoadURLQueue = [];
 });
 
 describe("FILE_WRITE / FILE_READ handlers (temp dir)", () => {
@@ -849,5 +948,378 @@ describe("SHELL_SHOW_ITEM_IN_FOLDER handler", () => {
 
     expect(res.success).toBe(false);
     expect(res.error).toBeTruthy();
+  });
+});
+
+describe("fetch_url tool (hidden→visible fallback, AC-1..10)", () => {
+  const HIDDEN_LOAD_TIMEOUT_MS = 10_000;
+  const CONTINUE_POLL_INTERVAL_MS = 500;
+  const COOKIE_CONSENT_WAIT_MS = 1500;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  /**
+   * Kicks off `fetch_url` through the real AI_CHAT → runTool → executeTool
+   * dispatch (same path the shipped agent uses), WITHOUT awaiting the
+   * overall AI_CHAT promise yet, so the test can drive fake timers / mock
+   * BrowserWindow events mid-flight. `attemptHiddenFetch`'s synchronous
+   * preamble (constructing the hidden BrowserWindow, calling `loadURL`) has
+   * already run by the time this function returns — every async function in
+   * the executeTool → fetchUrl → attemptHiddenFetch chain runs synchronously
+   * up to its own first genuine `await`, and `invoke()` isn't itself awaited
+   * here, so no real event-loop turn happens in between.
+   */
+  function startFetchUrl(
+    url: string,
+    waitForSelector?: string,
+  ): { invokePromise: Promise<unknown>; getToolResult: () => unknown } {
+    let toolResult: unknown;
+    runChatImpl = async (options) => {
+      toolResult = await options.runTool("fetch_url", {
+        url,
+        waitForSelector,
+      });
+      return { content: "ok" };
+    };
+    const invokePromise = invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: {},
+      candidature: MIN_CANDIDATURE,
+    });
+    return { invokePromise, getToolResult: () => toolResult };
+  }
+
+  it("happy path: loads normally, no auth issue — invisible only, no visible window (AC-1)", async () => {
+    const { invokePromise, getToolResult } = startFetchUrl(
+      "https://example.com/jobs/123",
+    );
+
+    expect(mockCreatedWindows).toHaveLength(1);
+    const hiddenWin = mockCreatedWindows[0];
+    hiddenWin.webContents.getTitle.mockResolvedValue(
+      "Software Engineer — Example",
+    );
+    hiddenWin.webContents.getURL.mockReturnValue(
+      "https://example.com/jobs/123",
+    );
+    hiddenWin.webContents.__mockContent = "Full job description text.";
+
+    // Only the (existing, unchanged) cookie-consent wait needs a timer tick.
+    await vi.advanceTimersByTimeAsync(COOKIE_CONSENT_WAIT_MS);
+    await invokePromise;
+
+    expect(getToolResult()).toEqual({
+      success: true,
+      content: "Full job description text.",
+      finalUrl: "https://example.com/jobs/123",
+    });
+    // No visible fallback window was ever created — no regression (AC-1).
+    expect(mockCreatedWindows).toHaveLength(1);
+    expect(hiddenWin.destroy).toHaveBeenCalled();
+    expect(hiddenWin.constructorArgs).toMatchObject({
+      show: false,
+      opacity: 0,
+      skipTaskbar: true,
+    });
+  });
+
+  it("hard error: DNS/network failure during the hidden attempt returns immediately, no visible window (AC-7)", async () => {
+    mockLoadURLQueue.push(() =>
+      Promise.reject(new Error("net::ERR_NAME_NOT_RESOLVED")),
+    );
+
+    const { invokePromise, getToolResult } = startFetchUrl(
+      "https://does-not-resolve.invalid/job",
+    );
+    await invokePromise;
+
+    expect(getToolResult()).toEqual({
+      success: false,
+      error: "net::ERR_NAME_NOT_RESOLVED",
+      errorCode: ErrorCodes.FETCH_NETWORK_ERROR,
+    });
+    // A hard load failure never opens a visible window.
+    expect(mockCreatedWindows).toHaveLength(1);
+  });
+
+  it("waitForSelector / cookie-consent auto-click still run unmodified on the hidden path (AC-9)", async () => {
+    const { invokePromise, getToolResult } = startFetchUrl(
+      "https://example.com/jobs/123",
+      ".job-description",
+    );
+
+    const hiddenWin = mockCreatedWindows[0];
+    hiddenWin.webContents.getTitle.mockResolvedValue("Software Engineer");
+    hiddenWin.webContents.getURL.mockReturnValue(
+      "https://example.com/jobs/123",
+    );
+    hiddenWin.webContents.__mockContent = "Job description.";
+
+    await vi.advanceTimersByTimeAsync(COOKIE_CONSENT_WAIT_MS);
+    await invokePromise;
+
+    expect(getToolResult()).toMatchObject({ success: true });
+    const scripts = hiddenWin.webContents.executeJavaScript.mock.calls.map(
+      ([script]) => script,
+    );
+    // The selector-wait script (existing, unchanged logic) ran with the
+    // given selector.
+    expect(
+      scripts.some(
+        (s) => typeof s === "string" && s.includes(".job-description"),
+      ),
+    ).toBe(true);
+    // The cookie-consent auto-click script (existing, unchanged) also ran.
+    expect(
+      scripts.some(
+        (s) => typeof s === "string" && s.includes("acceptPatterns"),
+      ),
+    ).toBe(true);
+  });
+
+  it("timeout fallback: stuck hidden load opens a real visible BrowserWindow on the same session partition (AC-2, AC-4, AC-8, AC-10)", async () => {
+    mockLoadURLQueue.push(() => new Promise<void>(() => {})); // hidden: never settles
+    mockLoadURLQueue.push(() => Promise.resolve()); // visible: loads fine
+
+    const { invokePromise, getToolResult } = startFetchUrl(
+      "https://example.com/jobs/123",
+    );
+    expect(mockCreatedWindows).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(HIDDEN_LOAD_TIMEOUT_MS);
+
+    // Hidden window discarded, a NEW visible window opened (AC-2).
+    expect(mockCreatedWindows).toHaveLength(2);
+    const hiddenWin = mockCreatedWindows[0];
+    const visibleWin = mockCreatedWindows[1];
+    expect(hiddenWin.destroy).toHaveBeenCalled();
+
+    const webPreferences = visibleWin.constructorArgs.webPreferences as Record<
+      string,
+      unknown
+    >;
+    // AC-8: same persistent session partition reused for the visible window.
+    expect(webPreferences.partition).toBe("persist:worklooking-fetch");
+    // AC-2: real, visible window (not offscreen/hidden).
+    expect(visibleWin.constructorArgs.show).toBe(true);
+    // AC-10: security config matches the rest of the app.
+    expect(webPreferences.contextIsolation).toBe(true);
+    expect(webPreferences.nodeIntegration).toBe(false);
+    expect(webPreferences.sandbox).toBe(true);
+    expect(webPreferences.preload).toBeUndefined();
+
+    // AC-4: banner injected on load, re-injected on further navigations
+    // (login → 2FA → landing page).
+    visibleWin.webContents.__emit("did-finish-load");
+    visibleWin.webContents.__emit("did-navigate");
+    visibleWin.webContents.__emit("did-navigate-in-page");
+    const bannerCalls = visibleWin.webContents.executeJavaScript.mock.calls.filter(
+      ([script]) =>
+        typeof script === "string" &&
+        script.includes("J'ai terminé, continuer"),
+    );
+    expect(bannerCalls.length).toBeGreaterThanOrEqual(3);
+
+    // AC-5 (revision): clicking "Continuer" only signals "done
+    // authenticating" — it does NOT extract this window's content. A decoy
+    // value proves it's never read.
+    visibleWin.webContents.__mockContent = "SHOULD NOT BE USED";
+    visibleWin.webContents.__continueClicked = true;
+    await vi.advanceTimersByTimeAsync(CONTINUE_POLL_INTERVAL_MS);
+
+    expect(visibleWin.destroy).toHaveBeenCalled();
+    // fetchUrl closes the visible window and re-runs the hidden fetch
+    // against the ORIGINAL url — a THIRD (hidden) BrowserWindow appears.
+    expect(mockCreatedWindows).toHaveLength(3);
+    const refetchWin = mockCreatedWindows[2];
+    expect(refetchWin.constructorArgs).toMatchObject({
+      show: false,
+      opacity: 0,
+      skipTaskbar: true,
+    });
+    refetchWin.webContents.getTitle.mockResolvedValue(
+      "Software Engineer — Example",
+    );
+    refetchWin.webContents.getURL.mockReturnValue(
+      "https://example.com/jobs/123",
+    );
+    refetchWin.webContents.__mockContent = "Contenu après connexion.";
+
+    // The re-fetch runs the same (unchanged) cookie-consent wait as any
+    // hidden attempt.
+    await vi.advanceTimersByTimeAsync(COOKIE_CONSENT_WAIT_MS);
+    await invokePromise;
+
+    expect(getToolResult()).toEqual({
+      success: true,
+      content: "Contenu après connexion.",
+      finalUrl: "https://example.com/jobs/123",
+    });
+    expect(refetchWin.destroy).toHaveBeenCalled();
+  });
+
+  it("heuristic fallback: hidden load succeeds but looks like a login page — falls back instead of an immediate FETCH_NEEDS_AUTH (AC-3, AC-5)", async () => {
+    const { invokePromise, getToolResult } = startFetchUrl(
+      "https://example.com/jobs/123",
+    );
+    const hiddenWin = mockCreatedWindows[0];
+    hiddenWin.webContents.getTitle.mockResolvedValue("Sign In");
+    hiddenWin.webContents.getURL.mockReturnValue("https://example.com/login");
+
+    await vi.advanceTimersByTimeAsync(COOKIE_CONSENT_WAIT_MS);
+
+    // A visible fallback window was opened instead of an immediate
+    // FETCH_NEEDS_AUTH error.
+    expect(mockCreatedWindows).toHaveLength(2);
+    const visibleWin = mockCreatedWindows[1];
+    expect(visibleWin.constructorArgs.show).toBe(true);
+
+    visibleWin.webContents.__emit("did-finish-load");
+    // Decoy content on the visible window — must NOT end up in the result;
+    // clicking Continue only signals "done authenticating" (AC-5 revision).
+    visibleWin.webContents.__mockContent = "SHOULD NOT BE USED";
+    visibleWin.webContents.__continueClicked = true;
+    await vi.advanceTimersByTimeAsync(CONTINUE_POLL_INTERVAL_MS);
+
+    expect(visibleWin.destroy).toHaveBeenCalled();
+    // A THIRD BrowserWindow — the post-Continue re-fetch of the ORIGINAL
+    // requested URL (not the login-redirect URL) — is constructed.
+    expect(mockCreatedWindows).toHaveLength(3);
+    const refetchWin = mockCreatedWindows[2];
+    refetchWin.webContents.getTitle.mockResolvedValue(
+      "Software Engineer — Example",
+    );
+    refetchWin.webContents.getURL.mockReturnValue(
+      "https://example.com/jobs/123",
+    );
+    refetchWin.webContents.__mockContent =
+      "Contenu de l'offre après connexion.";
+
+    await vi.advanceTimersByTimeAsync(COOKIE_CONSENT_WAIT_MS);
+    await invokePromise;
+
+    const result = getToolResult() as {
+      success: boolean;
+      content?: string;
+      finalUrl?: string;
+      needsAuth?: boolean;
+      errorCode?: string;
+    };
+    expect(result.success).toBe(true);
+    expect(result.content).toBe("Contenu de l'offre après connexion.");
+    expect(result.finalUrl).toBe("https://example.com/jobs/123");
+    // No immediate FETCH_NEEDS_AUTH — the fallback flow handled it instead.
+    expect(result.needsAuth).toBeUndefined();
+    expect(result.errorCode).toBeUndefined();
+  });
+
+  it("re-fetch after Continue still needs auth (stuck again) — fails immediately with FETCH_LOGIN_INCOMPLETE, no second visible window", async () => {
+    mockLoadURLQueue.push(() => new Promise<void>(() => {})); // hidden: never settles
+    mockLoadURLQueue.push(() => Promise.resolve()); // visible: loads fine
+
+    const { invokePromise, getToolResult } = startFetchUrl(
+      "https://example.com/jobs/123",
+    );
+    await vi.advanceTimersByTimeAsync(HIDDEN_LOAD_TIMEOUT_MS);
+
+    expect(mockCreatedWindows).toHaveLength(2);
+    const visibleWin = mockCreatedWindows[1];
+
+    // Queue the re-fetch (third window)'s loadURL to also never settle, so
+    // it hits the same stuck-load timeout as the original attempt.
+    mockLoadURLQueue.push(() => new Promise<void>(() => {}));
+
+    // Navigation event starts the Continue-click poll (as the other tests
+    // do); without it the poll never runs and the click flag is never read.
+    visibleWin.webContents.__emit("did-finish-load");
+    visibleWin.webContents.__continueClicked = true;
+    await vi.advanceTimersByTimeAsync(CONTINUE_POLL_INTERVAL_MS);
+
+    expect(mockCreatedWindows).toHaveLength(3);
+    const refetchWin = mockCreatedWindows[2];
+    expect(refetchWin.constructorArgs).toMatchObject({ show: false });
+
+    // The re-fetch stalls for the full 10s timeout again — one shot only:
+    // fail immediately rather than opening a second visible window.
+    await vi.advanceTimersByTimeAsync(HIDDEN_LOAD_TIMEOUT_MS);
+    await invokePromise;
+
+    expect(getToolResult()).toMatchObject({
+      success: false,
+      errorCode: ErrorCodes.FETCH_LOGIN_INCOMPLETE,
+    });
+    // No second visible window was ever opened — exactly 3 windows total.
+    expect(mockCreatedWindows).toHaveLength(3);
+    expect(refetchWin.destroy).toHaveBeenCalled();
+  });
+
+  it("re-fetch after Continue hits a hard error — returns the existing FETCH_NETWORK_ERROR shape", async () => {
+    mockLoadURLQueue.push(() => new Promise<void>(() => {})); // hidden: never settles
+    mockLoadURLQueue.push(() => Promise.resolve()); // visible: loads fine
+
+    const { invokePromise, getToolResult } = startFetchUrl(
+      "https://example.com/jobs/123",
+    );
+    await vi.advanceTimersByTimeAsync(HIDDEN_LOAD_TIMEOUT_MS);
+
+    expect(mockCreatedWindows).toHaveLength(2);
+    const visibleWin = mockCreatedWindows[1];
+
+    // Queue the re-fetch (third window)'s loadURL to reject outright — a
+    // genuine hard error, not a stuck/needs-auth condition.
+    mockLoadURLQueue.push(() =>
+      Promise.reject(new Error("net::ERR_CONNECTION_RESET")),
+    );
+
+    // Navigation event starts the Continue-click poll (as the other tests
+    // do); without it the poll never runs and the click flag is never read.
+    visibleWin.webContents.__emit("did-finish-load");
+    visibleWin.webContents.__continueClicked = true;
+    await vi.advanceTimersByTimeAsync(CONTINUE_POLL_INTERVAL_MS);
+    await invokePromise;
+
+    expect(getToolResult()).toEqual({
+      success: false,
+      error: "net::ERR_CONNECTION_RESET",
+      errorCode: ErrorCodes.FETCH_NETWORK_ERROR,
+    });
+    // The re-fetch's hard error doesn't open any further window.
+    expect(mockCreatedWindows).toHaveLength(3);
+  });
+
+  it("cancel path: closing the visible window without clicking Continue resolves a clean failure (AC-6)", async () => {
+    mockLoadURLQueue.push(() => new Promise<void>(() => {})); // hidden: never settles
+    mockLoadURLQueue.push(() => Promise.resolve()); // visible: loads fine
+
+    const { invokePromise, getToolResult } = startFetchUrl(
+      "https://example.com/jobs/123",
+    );
+    await vi.advanceTimersByTimeAsync(HIDDEN_LOAD_TIMEOUT_MS);
+
+    expect(mockCreatedWindows).toHaveLength(2);
+    const visibleWin = mockCreatedWindows[1];
+
+    // User closes the window without ever clicking "Continuer".
+    visibleWin.__emit("closed");
+    await invokePromise;
+
+    expect(getToolResult()).toEqual({
+      success: false,
+      error: "The login window was closed before authentication completed.",
+      errorCode: ErrorCodes.FETCH_LOGIN_CANCELLED,
+    });
+    // No Continue click was ever observed, so no re-fetch is attempted:
+    // exactly the hidden + visible windows, no third (re-fetch) window.
+    expect(mockCreatedWindows).toHaveLength(2);
   });
 });

@@ -60,12 +60,50 @@ The `ai:chat` handler in `electron/main.ts` runs a provider-agnostic function-ca
 3. Delegates the chat loop to `AiClientRouter.getInstance().runChat(api, …)`
    (`electron/agent/aiClient.ts`), which selects the OpenAI or Anthropic adapter.
 4. The adapter drives the tool loop, calling back into the `runTool` callback, which
-   invokes `executeTool()` (`main.ts` ~L714) for each tool from `electron/agent/tools.ts`.
+   invokes `executeTool()` (`main.ts` ~L981) for each tool from `electron/agent/tools.ts`.
    The `ai:chat` handler delegates to a shared `runChatLoop` helper.
 5. Streams progress via `chat:update` and `tool:status`.
 6. Returns final response with optional `updatedResume` / `updatedConfig` /
    `company` / `position` (the latter two captured from a `render_resume_html`
    call, if any, during the turn).
+
+### `fetch_url` hidden→visible fallback
+
+`fetchUrl()` (`electron/main.ts`) always tries a **hidden/offscreen `BrowserWindow`**
+first (`attemptHiddenFetch`), on the persistent `persist:worklooking-fetch` session
+partition so cookies/login survive across calls and app restarts. It falls back to a
+**real, visible** `BrowserWindow` (`openVisibleFallbackWindow`) — same session
+partition, same ~1200×800 size — when either:
+
+- the hidden attempt's initial `loadURL` doesn't settle within a 10s timeout
+  (`FETCH_HIDDEN_LOAD_TIMEOUT_MS`), treated as stuck (e.g. a WebAuthn/security-key
+  hang), or
+- `detectsAuthRequired()` (`electron/lib/auth-detect.ts`) flags the (successfully)
+  loaded hidden page as a login page.
+
+Both signals are combined by the pure, unit-testable
+`shouldFallBackToVisible()` helper (`electron/lib/fetch-fallback.ts`). The visible
+window navigates to the hidden attempt's last-known URL (falling back to the
+originally-requested URL), injects a French banner ("J'ai terminé, continuer") that
+is re-injected after every navigation event so it survives multi-step logins
+(login → 2FA/security-key → landing page), and polls for the button click. Clicking
+Continue means only "I've finished authenticating" — it does **not** extract
+content from the visible window. `fetchUrl` closes the window and re-runs
+`attemptHiddenFetch` against the **original requested URL** (not the visible
+window's landed URL), on the same `persist:worklooking-fetch` session. If that
+re-fetch succeeds and isn't flagged by `detectsAuthRequired()`, `fetch_url`
+resolves `{ success: true, content, finalUrl }` from the re-fetch itself
+(50 000-char truncation, same as the first attempt). If the re-fetch times out
+again or is still flagged as a login page, `fetch_url` fails immediately with
+`errorCode: ErrorCodes.FETCH_LOGIN_INCOMPLETE` — one shot only, no second
+visible window, no retry loop. Closing the visible window without clicking
+Continue resolves a clean failure with `errorCode: ErrorCodes.FETCH_LOGIN_CANCELLED`
+(no hang, no unhandled rejection, no re-fetch attempted). A hard load failure
+during either the **hidden** attempt or the post-Continue re-fetch (DNS
+failure, malformed URL, etc.) still returns the existing `FETCH_NETWORK_ERROR`
+immediately, with no (additional) visible window opened. `waitForSelector`
+handling and the cookie-consent auto-click in the hidden-attempt path are
+unchanged and apply identically to the re-fetch.
 
 ## CV feedback loop (single-window, in-app modal)
 

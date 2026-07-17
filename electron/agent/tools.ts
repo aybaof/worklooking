@@ -116,7 +116,7 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
     function: {
       name: "fetch_url",
       description:
-        "Récupère le contenu texte d'une URL (offre d'emploi, site entreprise). Utilise une session persistante pour préserver les cookies entre les appels. Si l'URL nécessite une authentification, la fonction retournera needsAuth: true avec un message d'erreur.",
+        "Récupère le contenu texte d'une URL (offre d'emploi, site entreprise). Utilise une session persistante pour préserver les cookies entre les appels. Si une connexion est nécessaire, une fenêtre de navigateur visible s'ouvre automatiquement pour que l'utilisateur puisse se connecter ; une fois connecté, il clique sur « J'ai terminé, continuer », la fenêtre se ferme et la page d'origine est revérifiée automatiquement pour en récupérer le contenu. Si la connexion n'est toujours pas terminée à ce moment-là, la fonction retourne une erreur invitant l'utilisateur à réessayer une fois bien connecté. Si l'utilisateur ferme cette fenêtre sans cliquer sur « J'ai terminé, continuer », la fonction retourne une erreur.",
       parameters: {
         type: "object",
         properties: {

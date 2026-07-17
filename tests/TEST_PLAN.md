@@ -62,6 +62,7 @@ the commented-out imports, and delete this note as they go.
 | Target | Skeleton file | Refactor needed? |
 | ------ | ------------- | ---------------- |
 | `validateAndSanitizePath`, `detectsAuthRequired` | `electron/main.test.ts` | **Yes** — not exported. Extract to `electron/lib/*.ts` (preferred) or add `export`. Update `docs/architecture.md`. |
+| `shouldFallBackToVisible` | `electron/main.test.ts` | No — exported from `electron/lib/fetch-fallback.ts`. |
 | `normalizeAnthropicBaseURL`, `isAzureEndpoint` | `electron/agent/aiClient.test.ts` | `isAzureEndpoint` not exported — export it. |
 | `GenerateSystemPrompt` (PII stripping) | `electron/agent/prompt.test.ts` | No. **Security-critical — see AGENTS.md #7.** |
 | Handlebars helpers + `renderTheme` | `electron/themes/shared/render.test.ts` | No. |
@@ -102,11 +103,16 @@ Use fake timers for autosave/debounce.
 | IPC handlers: FILE_READ/WRITE, RESUME_RENDER_PREVIEW, APP_SET_USER_DATA_PATH; `readPdf`; `executeTool` | `electron/main.integration.test.ts` | `vi.mock("electron", …)`; capture `ipcMain.handle` callbacks; real `fs.mkdtemp` temp dir. |
 | `processImage` | `electron/utils/image-processor.test.ts` | Needs `tests/fixtures/sample.png` + `not-an-image.txt`. |
 | Provider `runChat` loops | `electron/agent/aiClient.test.ts` | Mock the OpenAI/Anthropic SDK clients. |
+| `fetch_url` hidden→visible fallback (happy/timeout/heuristic/cancel/hard-error/security-config) | `electron/main.integration.test.ts` | Extend the mocked `BrowserWindow` class with a minimal `on`/`once` event emitter (window + `webContents`) and track created instances, so tests can fire `did-finish-load`/`did-navigate`/`closed` and assert how many/what kind of windows were created. Use `vi.useFakeTimers()` + `vi.advanceTimersByTimeAsync(...)` to drive the 10s hidden-load timeout and 500ms continue-poll interval without real waiting (repo convention, see `useDebounce.test.ts`). Clicking "Continuer" does **not** extract content from the visible window — it closes it and triggers a **third** hidden `BrowserWindow` re-fetching the original URL; assert the final `success`/`content`/`finalUrl` come from that third window. Cover the post-Continue re-fetch's own fallback outcome (timeout again or still flagged by `detectsAuthRequired`) failing immediately with `errorCode: ErrorCodes.FETCH_LOGIN_INCOMPLETE` and no second visible window (exactly 3 windows total), and the re-fetch hitting a hard error returning the unchanged `FETCH_NETWORK_ERROR` shape. |
 
-> `generatePdf` and `fetchUrl` need a real Electron `BrowserWindow` and are
-> **out of scope for unit/integration**; cover their pure cores
-> (`detectsAuthRequired`) instead, or add an e2e harness later (Playwright +
-> Electron) if desired — track as a follow-up, not part of this plan.
+> `generatePdf` still needs a real Electron `BrowserWindow` and remains **out of
+> scope for unit/integration** (unaffected by this feature); cover its pure core
+> elsewhere or add an e2e harness later (Playwright + Electron) if desired — track
+> as a follow-up, not part of this plan. `fetchUrl`'s orchestration, by contrast, is
+> now covered above via the extended `BrowserWindow` mock (event emitter + fake
+> timers), since the hidden→visible fallback decision itself is pure
+> (`shouldFallBackToVisible`, see Tier 1) and the window lifecycle is now
+> exercised through mocked `on`/`once`/`executeJavaScript` rather than a real window.
 
 ---
 
@@ -129,6 +135,9 @@ Keep this list in sync and reflect each in the relevant `docs/*.md`:
   `docs/agent.md` public-surface notes.
 - (Earlier) `electron/lib/paths.ts` + `electron/lib/auth-detect.ts` — extracted
   `validateAndSanitizePath`/`IPCError` and `detectsAuthRequired` from `main.ts`.
+- `electron/lib/fetch-fallback.ts` — new pure `shouldFallBackToVisible(reasons)`
+  helper, extracted alongside `fetchUrl()`'s split into `attemptHiddenFetch` +
+  `openVisibleFallbackWindow` (hidden→visible fetch fallback feature).
 - `tests/renderer/mockWindowApi.ts` — fleshed out from the original stub into a
   typed `window.api` mock (no source change; test infra only). Tier 3 hooks
   required no source refactors.
@@ -167,6 +176,7 @@ Keep this list in sync and reflect each in the relevant `docs/*.md`:
 ## Progress checklist
 
 - [x] Tier 1 — main.ts pure fns
+- [ ] Tier 1 — shouldFallBackToVisible (electron/lib/fetch-fallback.ts)
 - [x] Tier 1 — aiClient normalize/azure
 - [x] Tier 1 — prompt PII stripping
 - [x] Tier 1 — themes helpers + renderTheme
@@ -184,5 +194,6 @@ Keep this list in sync and reflect each in the relevant `docs/*.md`:
 - [x] Tier 3 — useOnboarding
 - [x] Tier 3 — useDebounce
 - [x] Tier 4 — main.ts integration (IPC/fs/pdf/executeTool)
+- [ ] Tier 4 — fetch_url hidden→visible fallback (main.integration.test.ts)
 - [x] Tier 4 — image-processor
 - [x] Tier 4 — provider runChat loops

@@ -25,6 +25,7 @@ import { updateElectronApp } from "update-electron-app";
 import { processImage } from "./utils/image-processor";
 import { IPCError, validateAndSanitizePath } from "./lib/paths";
 import { detectsAuthRequired } from "./lib/auth-detect";
+import { shouldFallBackToVisible } from "./lib/fetch-fallback";
 import { deriveCandidatureFolderSegment } from "./lib/candidature-folder";
 
 // Only check for updates in production
@@ -39,6 +40,46 @@ const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 let USER_DATA_PATH = app.getPath("userData");
 const APP_PATH = app.getAppPath();
 const FETCH_SESSION_PARTITION = "persist:worklooking-fetch";
+// How long the hidden fetch attempt gets to settle its initial `loadURL`
+// before we treat it as stuck (e.g. a WebAuthn/security-key hang) and fall
+// back to a visible window.
+const FETCH_HIDDEN_LOAD_TIMEOUT_MS = 10_000;
+// How often we poll the visible fallback window for the user having clicked
+// "J'ai terminé, continuer".
+const FETCH_CONTINUE_POLL_INTERVAL_MS = 500;
+// Page-global flag set by the injected banner's button `onclick`. Naturally
+// reset on every navigation since it lives on the page's own `window`.
+const FETCH_CONTINUE_FLAG = "__worklookingFetchContinueClicked";
+// Idempotent banner injected (and re-injected after every navigation) into
+// the visible fallback window, inviting the user to log in and signal
+// completion. Removes any previously-injected banner before re-inserting so
+// repeated navigation events don't stack duplicate banners.
+const CONTINUE_BANNER_SCRIPT = `
+(function() {
+  var existing = document.getElementById('worklooking-fetch-continue-banner');
+  if (existing) existing.remove();
+
+  var banner = document.createElement('div');
+  banner.id = 'worklooking-fetch-continue-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1a1a2e;color:#ffffff;padding:12px 16px;font-family:sans-serif;font-size:14px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+
+  var message = document.createElement('span');
+  message.textContent = "Ce site nécessite une connexion. Connectez-vous puis cliquez sur le bouton ci-dessous pour continuer.";
+  message.style.marginRight = '12px';
+
+  var button = document.createElement('button');
+  button.id = 'worklooking-fetch-continue-button';
+  button.textContent = "J'ai terminé, continuer";
+  button.style.cssText = 'background:#4f46e5;color:#ffffff;border:none;border-radius:4px;padding:8px 16px;font-size:14px;cursor:pointer;';
+  button.onclick = function() {
+    window['${FETCH_CONTINUE_FLAG}'] = true;
+  };
+
+  banner.appendChild(message);
+  banner.appendChild(button);
+  document.documentElement.appendChild(banner);
+})();
+`;
 
 // --- Types ---
 
@@ -62,6 +103,37 @@ interface ChatArgs {
   candidature: CandidatureConfig;
   selectedTheme?: string;
 }
+
+interface FetchUrlResult {
+  success: boolean;
+  content?: string;
+  error?: string;
+  errorCode?: string;
+  needsAuth?: boolean;
+  finalUrl?: string;
+}
+
+// Outcome of the hidden-window fetch attempt: either it succeeded outright,
+// hit a definite hard error (unchanged existing behavior), or needs to fall
+// back to a visible window (new stuck-timeout OR heuristic-auth path).
+type HiddenFetchOutcome =
+  | { kind: "success"; content: string; finalUrl: string }
+  | { kind: "hard-error"; error: string }
+  | {
+      kind: "fallback";
+      timedOut: boolean;
+      needsAuth: boolean;
+      navigateTo: string;
+    };
+
+// Outcome of the visible fallback window: either the user clicked "Continuer"
+// (meaning "I've finished authenticating" — fetchUrl must re-run the hidden
+// fetch against the original URL, not extract anything from this window), or
+// the window was closed without clicking Continue (carries the existing,
+// unchanged FETCH_LOGIN_CANCELLED failure result).
+type VisibleFallbackOutcome =
+  | { kind: "continue-clicked" }
+  | { kind: "cancelled"; result: FetchUrlResult };
 
 // --- Core Functionality ---
 
@@ -95,17 +167,17 @@ async function renderResume({
   }
 }
 
-async function fetchUrl(
+/**
+ * Hidden/offscreen fetch attempt: races the initial `loadURL` against a
+ * stuck-load timeout, then (if the load settled in time) runs the existing,
+ * unchanged `waitForSelector` + cookie-consent-auto-click + auth-detection
+ * logic. Returns a discriminated outcome for `fetchUrl` to dispatch on —
+ * never opens a visible window itself.
+ */
+async function attemptHiddenFetch(
   url: string,
-  options: { waitForSelector?: string } = {},
-): Promise<{
-  success: boolean;
-  content?: string;
-  error?: string;
-  errorCode?: string;
-  needsAuth?: boolean;
-  finalUrl?: string;
-}> {
+  waitForSelector?: string,
+): Promise<HiddenFetchOutcome> {
   const win = new BrowserWindow({
     show: false, // Always hidden
     width: 1200,
@@ -120,18 +192,53 @@ async function fetchUrl(
     },
   });
 
+  // Best-effort read of wherever the hidden window currently is, falling
+  // back to the originally-requested URL if unavailable/blank.
+  const safeGetUrl = (): string => {
+    try {
+      const current = win.webContents.getURL();
+      return current && current !== "about:blank" ? current : url;
+    } catch {
+      return url;
+    }
+  };
+
   try {
-    // Load URL
-    await win.loadURL(url);
+    // Load URL, racing it against the stuck-load timeout. A late rejection
+    // after the timeout wins is expected/harmless — swallow it here so it
+    // never surfaces as an unhandled promise rejection.
+    const loadPromise = win.loadURL(url);
+    loadPromise.catch(() => {});
+
+    let timedOut = false;
+    let timeoutHandle: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<void>((resolve) => {
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        resolve();
+      }, FETCH_HIDDEN_LOAD_TIMEOUT_MS);
+    });
+
+    await Promise.race([loadPromise, timeoutPromise]);
+    clearTimeout(timeoutHandle!);
+
+    if (timedOut) {
+      return {
+        kind: "fallback",
+        timedOut: true,
+        needsAuth: false,
+        navigateTo: safeGetUrl(),
+      };
+    }
 
     // Optional: wait for specific selector (30 second timeout)
-    if (options.waitForSelector) {
+    if (waitForSelector) {
       try {
         await win.webContents.executeJavaScript(`
           new Promise((resolve, reject) => {
             const timeout = setTimeout(() => reject('Selector timeout'), 30000);
             const check = () => {
-              if (document.querySelector('${options.waitForSelector.replace(/'/g, "\\'")}')) {
+              if (document.querySelector('${waitForSelector.replace(/'/g, "\\'")}')) {
                 clearTimeout(timeout);
                 resolve();
               } else {
@@ -143,9 +250,7 @@ async function fetchUrl(
         `);
       } catch (selectorError) {
         // Selector timeout - continue anyway
-        console.warn(
-          `Selector "${options.waitForSelector}" not found within timeout`,
-        );
+        console.warn(`Selector "${waitForSelector}" not found within timeout`);
       }
     }
 
@@ -228,14 +333,12 @@ async function fetchUrl(
     // Conservative auth detection
     const needsAuth = detectsAuthRequired(url, finalUrl, pageTitle);
 
-    if (needsAuth) {
+    if (shouldFallBackToVisible({ hiddenLoadTimedOut: false, needsAuth })) {
       return {
-        success: false,
+        kind: "fallback",
+        timedOut: false,
         needsAuth: true,
-        finalUrl,
-        error:
-          "Authentication required. This URL requires login. Please fetch it from a browser or provide pre-authenticated cookies.",
-        errorCode: ErrorCodes.FETCH_NEEDS_AUTH,
+        navigateTo: finalUrl || url,
       };
     }
 
@@ -245,19 +348,183 @@ async function fetchUrl(
     );
 
     return {
-      success: true,
+      kind: "success",
       content: content.substring(0, 50000),
       finalUrl,
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    return {
-      success: false,
-      error: message,
-      errorCode: ErrorCodes.FETCH_NETWORK_ERROR,
-    };
+    return { kind: "hard-error", error: message };
   } finally {
     win.destroy();
+  }
+}
+
+/**
+ * Opens a real, visible `BrowserWindow` on the same persistent fetch session
+ * partition so the user can complete an interactive login (and any 2FA/
+ * security-key challenge) that the hidden attempt couldn't handle. Injects a
+ * French "Continuer" banner, re-injected after every navigation, and polls
+ * for the user's click. A click only signals "I've finished authenticating" —
+ * it does NOT mean this window's content should be extracted; `fetchUrl` is
+ * responsible for re-running the hidden fetch against the original URL
+ * afterwards. Resolves `{ kind: "continue-clicked" }` on click, or
+ * `{ kind: "cancelled", result }` (the existing, unchanged
+ * FETCH_LOGIN_CANCELLED failure) if the window is closed first — never
+ * hangs, never leaves an unhandled rejection.
+ */
+function openVisibleFallbackWindow(
+  navigateTo: string,
+): Promise<VisibleFallbackOutcome> {
+  return new Promise<VisibleFallbackOutcome>((resolve) => {
+    const win = new BrowserWindow({
+      show: true,
+      width: 1200,
+      height: 800,
+      webPreferences: {
+        partition: FETCH_SESSION_PARTITION, // Same session as the hidden attempt
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+
+    let settled = false;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    const clearPoll = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
+    const settle = (outcome: VisibleFallbackOutcome) => {
+      if (settled) return;
+      settled = true;
+      clearPoll();
+      resolve(outcome);
+      if (!win.isDestroyed()) {
+        win.destroy();
+      }
+    };
+
+    const injectBanner = () => {
+      win.webContents.executeJavaScript(CONTINUE_BANNER_SCRIPT).catch(() => {
+        // Non-fatal: a transient injection failure (e.g. mid-navigation)
+        // just means the banner is re-attempted on the next navigation event.
+      });
+    };
+
+    const startPolling = () => {
+      clearPoll();
+      pollInterval = setInterval(() => {
+        win.webContents
+          .executeJavaScript(`window['${FETCH_CONTINUE_FLAG}'] === true`)
+          .then((clicked: unknown) => {
+            if (settled || clicked !== true) return;
+            settle({ kind: "continue-clicked" });
+          })
+          .catch(() => {
+            // Ignore transient executeJavaScript errors (e.g. mid-navigation).
+          });
+      }, FETCH_CONTINUE_POLL_INTERVAL_MS);
+    };
+
+    const onNavigated = () => {
+      injectBanner();
+      startPolling();
+    };
+
+    win.webContents.on("did-finish-load", onNavigated);
+    win.webContents.on("did-navigate", onNavigated);
+    win.webContents.on("did-navigate-in-page", onNavigated);
+
+    win.once("closed", () => {
+      settle({
+        kind: "cancelled",
+        result: {
+          success: false,
+          error:
+            "The login window was closed before authentication completed.",
+          errorCode: ErrorCodes.FETCH_LOGIN_CANCELLED,
+        },
+      });
+    });
+
+    win.loadURL(navigateTo).catch(() => {
+      // Non-fatal: a failed initial navigation still leaves a visible,
+      // closable window so the cancel path keeps working.
+    });
+  });
+}
+
+/**
+ * Fetches the text content of a URL. Tries a hidden/offscreen window first
+ * (fast, invisible happy path); if that gets stuck (stuck-load timeout) or
+ * lands on what looks like a login page, falls back to a visible window so
+ * the user can log in interactively, then resumes automatically once they
+ * click "Continuer".
+ */
+async function fetchUrl(
+  url: string,
+  options: { waitForSelector?: string } = {},
+): Promise<FetchUrlResult> {
+  const outcome = await attemptHiddenFetch(url, options.waitForSelector);
+
+  switch (outcome.kind) {
+    case "success":
+      return {
+        success: true,
+        content: outcome.content,
+        finalUrl: outcome.finalUrl,
+      };
+    case "hard-error":
+      return {
+        success: false,
+        error: outcome.error,
+        errorCode: ErrorCodes.FETCH_NETWORK_ERROR,
+      };
+    case "fallback": {
+      const fallbackOutcome = await openVisibleFallbackWindow(
+        outcome.navigateTo,
+      );
+      if (fallbackOutcome.kind === "cancelled") {
+        return fallbackOutcome.result;
+      }
+
+      // "continue-clicked": the visible window is already closed. Re-run
+      // the hidden attempt against the ORIGINAL url (not outcome.navigateTo,
+      // and not whatever the visible window happened to land on), same
+      // waitForSelector, same persist:worklooking-fetch session.
+      const reFetch = await attemptHiddenFetch(url, options.waitForSelector);
+      switch (reFetch.kind) {
+        case "success":
+          return {
+            success: true,
+            content: reFetch.content,
+            finalUrl: reFetch.finalUrl,
+          };
+        case "hard-error":
+          return {
+            success: false,
+            error: reFetch.error,
+            errorCode: ErrorCodes.FETCH_NETWORK_ERROR,
+          };
+        case "fallback":
+          // Re-fetch itself timed out again, OR detectsAuthRequired flagged
+          // it again. One shot only: fail immediately, do NOT call
+          // openVisibleFallbackWindow a second time.
+          return {
+            success: false,
+            error:
+              "The site still requires authentication after clicking " +
+              '"J\'ai terminé, continuer"; please try fetching again once ' +
+              "you're fully logged in.",
+            errorCode: ErrorCodes.FETCH_LOGIN_INCOMPLETE,
+          };
+      }
+    }
   }
 }
 

@@ -29,6 +29,7 @@ electron/                 # Main process
 ├── lib/                  # Pure, testable helpers used by main.ts
 │   ├── paths.ts          # IPCError + validateAndSanitizePath (traversal guard)
 │   ├── auth-detect.ts    # detectsAuthRequired (fetch auth-wall heuristic)
+│   ├── fetch-fallback.ts # shouldFallBackToVisible (hidden→visible fetch decision)
 │   └── candidature-folder.ts # deriveCandidatureFolderSegment (Valider folder naming)
 └── utils/
     └── image-processor.ts
