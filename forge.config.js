@@ -6,6 +6,8 @@ const fsp = require("node:fs/promises");
 
 const path = require("path");
 
+const packageJson = require("./package.json");
+
 const externalDependencies = [
   "openai",
   "pdf-parse",
@@ -22,7 +24,7 @@ module.exports = {
     name: "WorkLookingAgent",
     executableName: "WorkLookingAgent",
     appId: "com.worklooking.agent",
-    appVersion: "1.0.2",
+    appVersion: packageJson.version,
     asar: {
       // The auto-unpack-natives plugin handles .node files.
       // We additionally unpack .dll files needed by native addons (e.g. sharp/libvips).

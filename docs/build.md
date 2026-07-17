@@ -43,6 +43,34 @@ Bundling and packaging are driven by **Electron Forge** with the **Vite plugin**
 
 - `extraResource: ["electron/themes/", "electron/agent/agent.md"]` — ships themes and the product agent instructions.
 - Fuses harden security (RunAsNode disabled, cookie encryption on).
+- `packagerConfig.appVersion` is derived from `package.json` (`packageJson.version`)
+  rather than hardcoded, so the built app's version always matches
+  `package.json.version` with no manual sync step — see "Release automation" below.
+
+## Release automation
+
+`.github/workflows/release.yml` builds and publishes the app for Windows,
+Linux, and macOS whenever a version tag is pushed:
+
+- **Trigger**: only on tag pushes matching `v*.*.*` (e.g. `v1.2.0`) — no
+  `workflow_dispatch`, no trigger on ordinary `main` pushes.
+- **Version gate**: a `validate-version` job strips the leading `v` from the
+  pushed tag and compares it to `package.json.version` on the tagged commit;
+  a mismatch fails the workflow with a clear `::error::` message before any
+  platform build starts.
+- **Matrix**: `windows-latest`, `ubuntu-latest`, `macos-latest`, each with
+  `needs: validate-version` and Node pinned to **24** via
+  `actions/setup-node`.
+- **Per-job gate order**: `npm ci` → `npm run typecheck` → `npm test` →
+  `npm run publish`. A typecheck or test failure stops that job before
+  `electron-forge publish` runs.
+- **Publish target**: GitHub Releases, via the existing
+  `@electron-forge/publisher-github` config in `forge.config.js`, using the
+  default `secrets.GITHUB_TOKEN` — no additional repo secrets are needed.
+- **Platform independence**: the matrix uses `fail-fast: false`, so one
+  platform's build/test/publish failure does not cancel or block the
+  others — a release can end up with partial platform coverage if one job
+  fails; re-check the Actions run, not just the Release page, after tagging.
 
 ## Testing (Vitest)
 
