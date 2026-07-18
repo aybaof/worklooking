@@ -46,6 +46,21 @@ Bundling and packaging are driven by **Electron Forge** with the **Vite plugin**
 - `packagerConfig.appVersion` is derived from `package.json` (`packageJson.version`)
   rather than hardcoded, so the built app's version always matches
   `package.json.version` with no manual sync step — see "Release automation" below.
+- `externalDependencies` + the `packageAfterCopy` hook copy npm packages that
+  are externalized from the Vite main-process bundle (see
+  `vite.main.config.ts`'s `rollupOptions.external`) into the packaged
+  `node_modules`, since Vite's `ssr` build leaves them as runtime `require()`
+  calls instead of bundling them. **Any package added to one list must be
+  added to the other**, or the packaged app crashes at startup with
+  `Cannot find module '<pkg>'`. The hook also walks each dependency's own
+  prod dependency tree (via `flora-colossus`) and separately enumerates
+  `node_modules/@img/*` (sharp's per-platform native binaries), since those
+  are optional dependencies the walker doesn't follow.
+- The `postMake` hook renames maker output to non-technical-friendly
+  filenames before publishing (e.g. `WorkLookingAgent-darwin-arm64-X.Y.Z.zip`
+  → `WorkLookingAgent-Mac-AppleSilicon-X.Y.Z.zip`). It intentionally leaves
+  Windows' `.nupkg`/`RELEASES` files untouched, since Squirrel's
+  auto-updater matches those by their exact original filename.
 
 ## Release automation
 
@@ -58,9 +73,12 @@ Linux, and macOS whenever a version tag is pushed:
   pushed tag and compares it to `package.json.version` on the tagged commit;
   a mismatch fails the workflow with a clear `::error::` message before any
   platform build starts.
-- **Matrix**: `windows-latest`, `ubuntu-latest`, `macos-latest`, each with
-  `needs: validate-version` and Node pinned to **24** via
-  `actions/setup-node`.
+- **Matrix**: `windows-latest`, `ubuntu-latest`, `macos-latest` (Apple
+  Silicon/arm64), `macos-13` (Intel/x64 — the last Intel-based GitHub-hosted
+  macOS image), each with `needs: validate-version` and Node pinned to
+  **24** via `actions/setup-node`. Native modules (e.g. sharp's `@img/*`
+  binaries) are resolved correctly per architecture because each matrix job
+  runs its own `npm ci`, so no cross-compilation or arch override is needed.
 - **Per-job gate order**: `npm ci` → `npm run typecheck` → `npm test` →
   `npm run publish`. A typecheck or test failure stops that job before
   `electron-forge publish` runs.

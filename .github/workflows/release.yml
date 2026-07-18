@@ -39,7 +39,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        # macos-latest is Apple Silicon (arm64); macos-13 is the last Intel
+        # (x64) runner image. Both are needed so we ship native builds for
+        # both Mac architectures instead of relying on Rosetta.
+        os: [windows-latest, ubuntu-latest, macos-latest, macos-13]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

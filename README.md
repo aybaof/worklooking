@@ -50,11 +50,29 @@ and no release on ordinary pushes to `main`.
 
 - A GitHub Release is created as a **prerelease** (not a draft), per the
   `publisher-github` config in `forge.config.js`.
-- Artifacts: a Windows Squirrel installer (`.exe`), a macOS `.zip`, and Linux
-  `.deb`/`.rpm` packages.
+- Artifacts (renamed by the `postMake` hook in `forge.config.js` for
+  non-technical users — see [`docs/build.md`](docs/build.md)):
+  - `WorkLookingAgent-Setup-X.Y.Z.exe` — Windows installer.
+  - `WorkLookingAgent-Mac-AppleSilicon-X.Y.Z.zip` — macOS, M1/M2/M3/M4 Macs
+    (2021+).
+  - `WorkLookingAgent-Mac-Intel-X.Y.Z.zip` — macOS, Intel Macs (2020 and
+    earlier).
+  - `WorkLookingAgent-Linux-Ubuntu-Debian-X.Y.Z.deb` — Ubuntu/Debian-based
+    Linux.
+  - `WorkLookingAgent-Linux-Fedora-RHEL-X.Y.Z.rpm` — Fedora/RHEL-based Linux.
+  - `WorkLookingAgent-X.Y.Z-full.nupkg` and `RELEASES` are internal files
+    used by the Windows auto-updater — not meant to be downloaded directly.
 - Builds are **unsigned** — there is no code signing or notarization. Expect
   OS security warnings (e.g. Windows SmartScreen, macOS Gatekeeper) when
   installing; this is expected, not a bug.
+- **macOS specifically**: since the app isn't notarized, Gatekeeper refuses
+  to open it with an "is damaged and should be moved to the Trash" message
+  and offers no "Open Anyway" option in Security settings. This isn't
+  actual corruption — it's how macOS treats unsigned downloads. Fix it by
+  running this once after unzipping, before the first launch:
+  ```bash
+  xattr -cr /path/to/WorkLookingAgent.app
+  ```
 
 ### 5. Failure behavior
 

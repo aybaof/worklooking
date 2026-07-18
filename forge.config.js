@@ -19,6 +19,31 @@ const externalDependencies = [
   "electron-squirrel-startup",
 ];
 
+// Maps a maker's raw output path to a friendlier, non-technical name for the
+// GitHub Release page (e.g. "AppleSilicon"/"Intel" instead of "arm64"/"x64").
+// Returns null for artifacts that must keep their original name/path:
+// Windows' .nupkg and RELEASES file are matched by exact filename by the
+// Squirrel auto-updater, so renaming them would break auto-update.
+function friendlyArtifactName(artifactPath, platform, arch, version) {
+  const ext = path.extname(artifactPath);
+
+  if (platform === "darwin" && ext === ".zip") {
+    const archLabel =
+      arch === "arm64" ? "AppleSilicon" : arch === "x64" ? "Intel" : arch;
+    return `WorkLookingAgent-Mac-${archLabel}-${version}${ext}`;
+  }
+
+  if (platform === "linux" && ext === ".deb") {
+    return `WorkLookingAgent-Linux-Ubuntu-Debian-${version}${ext}`;
+  }
+
+  if (platform === "linux" && ext === ".rpm") {
+    return `WorkLookingAgent-Linux-Fedora-RHEL-${version}${ext}`;
+  }
+
+  return null;
+}
+
 module.exports = {
   packagerConfig: {
     name: "WorkLookingAgent",
@@ -202,6 +227,34 @@ module.exports = {
         console.error("packageAfterCopy hook failed:", err);
         throw err;
       }
+    },
+    async postMake(_forgeConfig, makeResults) {
+      return Promise.all(
+        makeResults.map(async (result) => {
+          const artifacts = await Promise.all(
+            result.artifacts.map(async (artifactPath) => {
+              const friendlyName = friendlyArtifactName(
+                artifactPath,
+                result.platform,
+                result.arch,
+                packageJson.version,
+              );
+              if (!friendlyName) {
+                return artifactPath;
+              }
+
+              const friendlyPath = path.join(
+                path.dirname(artifactPath),
+                friendlyName,
+              );
+              await fsp.rename(artifactPath, friendlyPath);
+              return friendlyPath;
+            }),
+          );
+
+          return { ...result, artifacts };
+        }),
+      );
     },
   },
 };
