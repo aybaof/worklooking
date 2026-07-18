@@ -73,12 +73,39 @@ Linux, and macOS whenever a version tag is pushed:
   pushed tag and compares it to `package.json.version` on the tagged commit;
   a mismatch fails the workflow with a clear `::error::` message before any
   platform build starts.
-- **Matrix**: `windows-latest`, `ubuntu-latest`, `macos-latest` (Apple
-  Silicon/arm64), `macos-13` (Intel/x64 — the last Intel-based GitHub-hosted
-  macOS image), each with `needs: validate-version` and Node pinned to
-  **24** via `actions/setup-node`. Native modules (e.g. sharp's `@img/*`
-  binaries) are resolved correctly per architecture because each matrix job
-  runs its own `npm ci`, so no cross-compilation or arch override is needed.
+- **Matrix**: uses `matrix.include` (not a flat `os:` list) so each entry can
+  set its own `runs-on`:
+  - `windows-latest` (Windows x64)
+  - `ubuntu-latest` (Linux x64)
+  - `macos-latest` (macOS Apple Silicon/arm64, GitHub-hosted)
+  - `[self-hosted, macOS, X64]` (macOS Intel/x64 — see "Intel Mac runner
+    (self-hosted)" below)
+
+  Every job has `needs: validate-version` and Node pinned to **24** via
+  `actions/setup-node`. Native modules (e.g. sharp's `@img/*` binaries) are
+  resolved correctly per architecture because each matrix job runs its own
+  `npm ci`, so no cross-compilation or arch override is needed.
+
+### Intel Mac runner (self-hosted)
+
+GitHub removed the free Intel (x64) macOS hosted runner image (`macos-13` is
+deprecated/removed) and only offers x64 macOS via paid **Larger runners**
+(org/enterprise-only, GitHub Team/Enterprise Cloud plan required — not
+available on personal accounts). Instead, Intel Mac builds run on a
+**self-hosted runner** on real Intel Mac hardware:
+
+- **Labels**: registered with `self-hosted`, `macOS`, `X64` — targeted in the
+  workflow via `runs-on: [self-hosted, macOS, X64]`.
+- **Prerequisites on the runner machine**: `git` (for `actions/checkout`) and
+  a network connection; Node.js is **not** pre-installed manually —
+  `actions/setup-node@v4` downloads/installs Node 24 automatically on
+  self-hosted runners too, same as hosted ones.
+- **Must be online at release time**: the runner (and its background
+  service) must be powered on and connected whenever a `v*.*.*` tag is
+  pushed, or that matrix job hangs waiting for a runner to pick it up.
+- **Security note**: this is safe here because the workflow only triggers on
+  tag pushes (requires write access to the repo), not on `pull_request`, so
+  forks/external contributors can't schedule jobs on this machine.
 - **Per-job gate order**: `npm ci` → `npm run typecheck` → `npm test` →
   `npm run publish`. A typecheck or test failure stops that job before
   `electron-forge publish` runs.
