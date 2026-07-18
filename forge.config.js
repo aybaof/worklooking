@@ -57,14 +57,18 @@ module.exports = {
       config: {
         options: {
           bin: "WorkLookingAgent",
+          license: "MIT",
         },
       },
     },
     {
       name: "@electron-forge/maker-rpm",
+      // rpmbuild requires a License field; supply it explicitly since
+      // package.json has none.
       config: {
         options: {
           bin: "WorkLookingAgent",
+          license: "MIT",
         },
       },
     },
