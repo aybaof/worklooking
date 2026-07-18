@@ -52,11 +52,21 @@ module.exports = {
     },
     {
       name: "@electron-forge/maker-deb",
-      config: {},
+      // deb/rpm derive the expected binary name from the package name unless
+      // told otherwise; keep it in sync with packagerConfig.executableName.
+      config: {
+        options: {
+          bin: "WorkLookingAgent",
+        },
+      },
     },
     {
       name: "@electron-forge/maker-rpm",
-      config: {},
+      config: {
+        options: {
+          bin: "WorkLookingAgent",
+        },
+      },
     },
   ],
   plugins: [
