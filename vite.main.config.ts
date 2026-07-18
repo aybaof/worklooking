@@ -26,6 +26,7 @@ export default defineConfig({
       external: [
         "electron",
         "openai",
+        "@anthropic-ai/sdk",
         "pdf-parse",
         "sharp",
         "handlebars",

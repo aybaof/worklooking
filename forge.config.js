@@ -10,6 +10,7 @@ const packageJson = require("./package.json");
 
 const externalDependencies = [
   "openai",
+  "@anthropic-ai/sdk",
   "pdf-parse",
   "sharp",
   "handlebars",
