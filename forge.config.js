@@ -128,6 +128,11 @@ module.exports = {
         authToken: process.env.GITHUB_TOKEN,
         prerelease: true,
         draft: false,
+        // Re-running the release workflow for the same tag (e.g. to ship a
+        // hotfix without bumping the version) must overwrite stale assets —
+        // otherwise publisher-github silently skips any file whose name
+        // already exists on the release, keeping the old broken build.
+        force: true,
       },
     },
   ],
