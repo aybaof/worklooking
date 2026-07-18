@@ -16,7 +16,6 @@ const externalDependencies = [
   "moment",
   "update-electron-app",
   "electron-squirrel-startup",
-  "@img/sharp-win32-x64",
 ];
 
 module.exports = {
@@ -144,10 +143,33 @@ module.exports = {
           }
         }
 
+        // sharp's platform binaries (@img/sharp-<os>-<arch> and
+        // @img/sharp-libvips-<os>-<arch>) are optionalDependencies that
+        // flora-colossus does not walk. Copy whichever ones are actually
+        // installed for the current platform instead of hardcoding one.
+        const imgScopePath = path.join(sourceNodeModulesPath, "@img");
+        try {
+          const imgPackages = await fsp.readdir(imgScopePath);
+          for (const pkg of imgPackages) {
+            depsToCopy.add(`@img/${pkg}`);
+          }
+        } catch {
+          // No @img scope installed — nothing extra to copy.
+        }
+
         await Promise.all(
           Array.from(depsToCopy.values()).map(async (packageName) => {
             const sourcePath = path.join(sourceNodeModulesPath, packageName);
             const destPath = path.join(destNodeModulesPath, packageName);
+
+            try {
+              await fsp.access(sourcePath);
+            } catch {
+              console.warn(
+                `skipping "${packageName}": not present in node_modules on this platform`,
+              );
+              return;
+            }
 
             await fsp.mkdir(path.dirname(destPath), { recursive: true });
             await fsp.cp(sourcePath, destPath, {
