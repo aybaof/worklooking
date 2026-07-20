@@ -259,6 +259,49 @@ describe("AiClientRouter.runChat — OpenAI provider", () => {
     );
     expect(res.content).toBe("No content returned");
   });
+
+  it("stops after maxRounds without a further request when tool_calls never stop (AC-7)", async () => {
+    const runTool = vi.fn(async () => ({ ok: true }));
+    openaiCreate.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              {
+                id: "call_x",
+                type: "function",
+                function: { name: "read_file", arguments: "{}" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const res = await AiClientRouter.getInstance().runChat(
+      "openai",
+      baseOptions({ runTool, maxRounds: 5 }),
+    );
+
+    expect(res.cappedOut).toBe(true);
+    expect(openaiCreate).toHaveBeenCalledTimes(5);
+  });
+
+  it("uses toolDefs override instead of the full tool list when provided", async () => {
+    openaiCreate.mockResolvedValue({
+      choices: [{ message: { role: "assistant", content: "ok" } }],
+    });
+    const narrowTools = tools.filter(
+      (t) => t.type === "function" && t.function.name === "read_pdf",
+    );
+    await AiClientRouter.getInstance().runChat(
+      "openai",
+      baseOptions({ toolDefs: narrowTools }),
+    );
+    expect(openaiCreate.mock.calls[0][0].tools).toEqual(narrowTools);
+  });
 });
 
 describe("AiClientRouter.runChat — Anthropic provider", () => {
@@ -355,5 +398,45 @@ describe("AiClientRouter.runChat — Anthropic provider", () => {
     ).toBe(false);
     expect(call.messages).toHaveLength(1);
     expect(call.messages[0]).toEqual({ role: "user", content: "coucou" });
+  });
+
+  it("stops after maxRounds without a further request when tool_use never stops (AC-7)", async () => {
+    const runTool = vi.fn(async () => ({ ok: true }));
+    anthropicCreate.mockResolvedValue({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          id: "toolu_x",
+          name: "read_file",
+          input: {},
+        },
+      ],
+    });
+
+    const res = await AiClientRouter.getInstance().runChat(
+      "anthropic",
+      baseOptions({ runTool, maxRounds: 5 }),
+    );
+
+    expect(res.cappedOut).toBe(true);
+    expect(anthropicCreate).toHaveBeenCalledTimes(5);
+  });
+
+  it("uses toolDefs override instead of the full tool list when provided", async () => {
+    anthropicCreate.mockResolvedValue({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "ok" }],
+    });
+    const narrowTools = tools.filter(
+      (t) => t.type === "function" && t.function.name === "read_pdf",
+    );
+    await AiClientRouter.getInstance().runChat(
+      "anthropic",
+      baseOptions({ toolDefs: narrowTools }),
+    );
+    expect(anthropicCreate.mock.calls[0][0].tools).toEqual(
+      toAnthropicTools(narrowTools),
+    );
   });
 });

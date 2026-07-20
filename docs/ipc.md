@@ -75,6 +75,18 @@ The `ai:chat` handler in `electron/main.ts` runs a provider-agnostic function-ca
    `company` / `position` (the latter two captured from a `render_resume_html`
    call, if any, during the turn).
 
+> **No `ai:chat` contract change for specialist sub-agent tools.** The
+> `analyze_job_offer`/`write_motivation_letter` specialist tools (see
+> `docs/agent.md` → "Specialist sub-agent tools") are invoked from inside
+> `executeTool()` exactly like any other tool. They add **no** new IPC channel,
+> **no** new `tool:status`/`chat:update` event variant, and **no** new field to
+> `ai:chat`'s request/response shape — confirmed by reading `shared/ipc.ts` in
+> full: the `"ai:chat"` entry in `IPCHandlers` only has `{ content?, error?,
+> updatedResume?, updatedConfig?, company?, position? }` in its response, and
+> `Channels`/`ErrorCodes` are unaffected. Their nested `runSubAgent()` rounds
+> are silent by design (no `emitText`/`chat:update` forwarding), so they never
+> surface as extra renderer-visible events either.
+
 ### `fetch_url` hidden→visible fallback
 
 `fetchUrl()` (`electron/main.ts`) always tries a **hidden/offscreen `BrowserWindow`**

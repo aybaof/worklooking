@@ -23,7 +23,7 @@ the unit tests): `normalizeAnthropicBaseURL`, `isAzureEndpoint`, and
 
 ## Tools (`electron/agent/tools.ts`)
 
-Exactly 8 tools are defined, each with a **French** description:
+Exactly 10 tools are defined, each with a **French** description:
 
 | Tool | Purpose |
 | ---- | ------- |
@@ -35,9 +35,53 @@ Exactly 8 tools are defined, each with a **French** description:
 | `save_source_resume` | Save the main source resume (base CV only). |
 | `fetch_url` | Fetch text content of a URL (persistent session). On a stuck/likely-login page, falls back to a visible browser window so the user can log in; clicking "Continuer" closes that window and re-checks the original page, returning its content. If login still isn't complete after that one re-check, fails with `FETCH_LOGIN_INCOMPLETE` (one shot, no retry loop); `needsAuth`/`FETCH_NEEDS_AUTH` is no longer returned for these cases (only genuine hard failures return an error immediately). |
 | `read_pdf` | Extract text from a PDF (absolute path). |
+| `analyze_job_offer` | **Specialist** tool: extracts a compact structured summary (company/position/seniority/keyRequirements/keywords/summary) from a job offer given as `url` OR `text` (exactly one). Internally runs its own `runSubAgent()` loop with a narrow tool subset (`fetch_url`/`read_pdf`); never returns raw scraped text. See "Specialist sub-agent tools" below. |
+| `write_motivation_letter` | **Specialist** tool: drafts French motivation-letter text (~250–400 words) from an already-available `resumeExcerpt`/`offer`/`company`/`position`. Returns letter text only (never a file); saving to disk is a separate, later `write_file` call. See "Specialist sub-agent tools" below. |
 
 Each has a matching `case` in `executeTool()` (`electron/main.ts`) — the switch handles
-these exact 8 names and no others.
+these exact 10 names and no others.
+
+Two families of tools coexist: **flat direct-execution tools** (the original 8 —
+`read_file`, `write_file`, `save_candidature_config`, `render_resume_html`,
+`generate_resume_files`, `save_source_resume`, `fetch_url`, `read_pdf`) run
+synchronously in one `executeTool()` case with no nested LLM call; vs.
+**specialist sub-agent tools** (`analyze_job_offer`, `write_motivation_letter`) each
+internally run their own separate, narrow `runSubAgent()` tool-calling loop before
+resolving. See below.
+
+### Specialist sub-agent tools (`runSubAgent()`)
+
+`runSubAgent()` (`electron/agent/subAgent.ts`) is a reusable helper for tools that need
+their own short, silent, narrow tool-calling loop, layered on top of the same
+`AiClientRouter` used by the main orchestrator loop:
+
+- **Provider-agnostic:** delegates entirely to `AiClientRouter.getInstance().runChat()` —
+  no provider-specific code of its own. `ChatRunOptions` gained two optional fields to
+  make this possible: `maxRounds` (caps provider round-trips; `undefined` preserves the
+  main loop's existing unbounded behavior) and `toolDefs` (an override of the tool
+  schema list sent to the provider, defaulting to the full `tools` export when omitted).
+  `ChatRunResult` gained `cappedOut?: boolean`.
+- **5-round hard cap:** `SUB_AGENT_MAX_ROUNDS = 5`. If the specialist hasn't produced a
+  final (non-tool-call) answer within 5 provider round-trips, `runSubAgent()` aborts
+  before a 6th request is made and returns `{ success: false, error }`.
+- **Never throws:** hard provider/network errors and hitting the round cap both resolve
+  to a structured `{ success: false, error }` result — the calling `executeTool()` case
+  never needs a try/catch around `runSubAgent()` itself to stay safe.
+- **Isolated message history:** only the specialist's own single task input (built by
+  the calling `executeTool()` case), never the full user-visible conversation.
+- **Silent by design:** `SubAgentOptions` carries no `event`/`IpcMainInvokeEvent`/
+  renderer-facing field at all, and `emitText` passed to the underlying provider call is
+  a literal no-op — nested specialist rounds never reach `chat:update`/`tool:status`.
+  Only the top-level orchestrator narrates to the user.
+- **Narrow `allowedTools`:** each specialist's `runTool` is wrapped in a guard that
+  rejects any tool name outside `allowedTools` (defense-in-depth alongside the
+  `toolDefs` schema restriction), and neither specialist's `allowedTools` may include
+  the other specialist's name (no specialist-to-specialist calling — exactly one level
+  of nesting: orchestrator → specialist → base tool).
+- Each specialist's own narrow French system prompt lives in
+  `electron/agent/specialistPrompts.ts` (`buildAnalyzeJobOfferPrompt`,
+  `buildWriteMotivationLetterPrompt`), kept separate from `prompt.ts` (the main
+  orchestrator's system prompt builder).
 
 ### Resume-tailoring flow
 
@@ -68,6 +112,10 @@ written to disk until the user validates:
    - Sanitize any file paths (reuse `validateAndSanitizePath`).
 3. **Document** it (if user-facing behavior) in `electron/agent/agent.md`, keeping the French tone.
 4. Descriptions in `tools.ts` are French to match the assistant — keep it consistent.
+
+> Building a **specialist** tool that needs its own scoped, capped, silent sub-loop
+> instead of executing directly? Reuse `runSubAgent()` — see "Specialist sub-agent
+> tools" above rather than hand-rolling a one-off tool-calling loop.
 
 ## PII handling
 

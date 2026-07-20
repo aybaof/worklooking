@@ -169,4 +169,58 @@ export const tools: OpenAI.Chat.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "analyze_job_offer",
+      description:
+        "Analyse une offre d'emploi (à partir d'une URL ou d'un texte brut) et retourne un résumé structuré : entreprise, poste, séniorité, exigences clés et mots-clés. Fournir SOIT 'url' SOIT 'text', jamais les deux. Le résultat est structuré uniquement — le texte brut de l'offre n'est jamais renvoyé tel quel.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: {
+            type: "string",
+            description: "URL de l'offre d'emploi à analyser.",
+          },
+          text: {
+            type: "string",
+            description: "Texte brut de l'offre d'emploi à analyser.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "write_motivation_letter",
+      description:
+        "Rédige une lettre de motivation en français (250 à 400 mots environ) à partir d'un extrait du CV et de l'offre déjà disponibles dans la conversation. N'invente jamais d'expérience, de diplôme ou de compétence absente du CV fourni. Retourne uniquement le texte de la lettre (jamais de fichier) ; pour l'enregistrer sur disque, utiliser ensuite l'outil 'write_file' séparément, à la demande explicite de l'utilisateur.",
+      parameters: {
+        type: "object",
+        properties: {
+          resumeExcerpt: {
+            type: "object",
+            description:
+              "Extrait du CV (JSON Resume ou sous-ensemble) déjà disponible dans la conversation.",
+          },
+          offer: {
+            type: ["string", "object"],
+            description:
+              "Résultat structuré de 'analyze_job_offer', ou texte/résumé brut de l'offre.",
+          },
+          company: {
+            type: "string",
+            description: "Nom de l'entreprise ciblée par cette offre.",
+          },
+          position: {
+            type: "string",
+            description: "Intitulé du poste ciblé par cette offre.",
+          },
+        },
+        required: ["resumeExcerpt", "offer", "company", "position"],
+      },
+    },
+  },
 ];

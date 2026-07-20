@@ -8,6 +8,13 @@ import { ProviderApi } from "../../shared/provider-types";
  */
 export interface ChatRunResult {
   content: string;
+  /**
+   * `true` when `ChatRunOptions.maxRounds` was reached while the assistant
+   * still requested tool calls (no final, non-tool-call answer was
+   * produced). Only ever set when `maxRounds` was supplied — the main,
+   * uncapped orchestrator loop never sets it.
+   */
+  cappedOut?: boolean;
 }
 
 /**
@@ -33,6 +40,20 @@ export interface ChatRunOptions {
   messages: Array<{ role: string; content: string | null }>;
   runTool: ToolRunner;
   emitText: TextEmitter;
+  /**
+   * Caps the number of provider round-trips (request/response cycles).
+   * `undefined` = unbounded, preserving the main orchestrator loop's
+   * existing (uncapped) behavior exactly. Used by `runSubAgent()` to bound
+   * specialist sub-agent loops.
+   */
+  maxRounds?: number;
+  /**
+   * Optional override of the tool schema list sent to the provider.
+   * Defaults to the full module-level `tools` export when omitted, so the
+   * existing main loop is unaffected. Sub-agents pass a filtered subset so
+   * the specialist LLM cannot see/request tools outside its narrow set.
+   */
+  toolDefs?: OpenAI.Chat.ChatCompletionTool[];
 }
 
 export interface TestConnectionOptions {
@@ -110,16 +131,19 @@ class OpenAIProvider implements AiProvider {
     const { apiKey, baseURL, model, systemPrompt, messages, runTool, emitText } =
       options;
     const client = this.clientFor(apiKey, baseURL);
+    const toolDefs = options.toolDefs ?? tools;
 
     const currentMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
       ...(messages as OpenAI.Chat.ChatCompletionMessageParam[]),
     ];
 
+    // Counts provider request/response cycles made so far (this is the 1st).
+    let requestCount = 1;
     let response = await client.chat.completions.create({
       model,
       messages: currentMessages,
-      tools,
+      tools: toolDefs,
     });
 
     if (!response.choices || response.choices.length === 0) {
@@ -132,6 +156,10 @@ class OpenAIProvider implements AiProvider {
       assistantMessage.tool_calls &&
       assistantMessage.tool_calls.length > 0
     ) {
+      if (options.maxRounds && requestCount >= options.maxRounds) {
+        return { content: "", cappedOut: true };
+      }
+
       if (assistantMessage.content) {
         emitText(assistantMessage.content);
       }
@@ -148,10 +176,11 @@ class OpenAIProvider implements AiProvider {
         });
       }
 
+      requestCount++;
       response = await client.chat.completions.create({
         model,
         messages: currentMessages,
-        tools,
+        tools: toolDefs,
       });
 
       if (!response.choices || response.choices.length === 0) {
@@ -175,8 +204,10 @@ class OpenAIProvider implements AiProvider {
 
 // --- Anthropic (Messages API) adapter ---
 class AnthropicProvider implements AiProvider {
-  // Convert the OpenAI-style tool definitions into Anthropic's schema once.
-  private static anthropicTools: Anthropic.Tool[] = toAnthropicTools(tools);
+  // Convert the OpenAI-style tool definitions into Anthropic's schema once,
+  // used as the default (full-set) fallback when no `toolDefs` override is
+  // passed in `ChatRunOptions`.
+  private static fullAnthropicTools: Anthropic.Tool[] = toAnthropicTools(tools);
 
   private clientFor(apiKey: string, baseURL: string): Anthropic {
     const normalized = normalizeAnthropicBaseURL(baseURL);
@@ -198,7 +229,9 @@ class AnthropicProvider implements AiProvider {
     const { apiKey, baseURL, model, systemPrompt, messages, runTool, emitText } =
       options;
     const client = this.clientFor(apiKey, baseURL);
-    const anthropicTools = AnthropicProvider.anthropicTools;
+    const anthropicTools = options.toolDefs
+      ? toAnthropicTools(options.toolDefs)
+      : AnthropicProvider.fullAnthropicTools;
 
     // Anthropic takes the system prompt as a top-level field, so system
     // messages in the history are dropped here.
@@ -209,6 +242,8 @@ class AnthropicProvider implements AiProvider {
         content: String(m.content),
       }));
 
+    // Counts provider request/response cycles made so far (this is the 1st).
+    let requestCount = 1;
     let response = await client.messages.create({
       model,
       max_tokens: MAX_TOKENS,
@@ -218,6 +253,10 @@ class AnthropicProvider implements AiProvider {
     });
 
     while (response.stop_reason === "tool_use") {
+      if (options.maxRounds && requestCount >= options.maxRounds) {
+        return { content: "", cappedOut: true };
+      }
+
       for (const block of response.content) {
         if (block.type === "text" && block.text) {
           emitText(block.text);
@@ -242,6 +281,7 @@ class AnthropicProvider implements AiProvider {
       // Tool results are delivered as a single user turn.
       currentMessages.push({ role: "user", content: toolResults });
 
+      requestCount++;
       response = await client.messages.create({
         model,
         max_tokens: MAX_TOKENS,

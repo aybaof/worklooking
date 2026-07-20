@@ -75,14 +75,14 @@ candidatures/
 
 #### Processus de création d'une candidature (Séquentiel)
 
-1. **Obtenir l'offre** : Utiliser `fetch_url` (si lien) ou texte direct. **Attendre le résultat.**
+1. **Obtenir l'offre** : Utiliser `fetch_url` (si lien) ou texte direct. **Attendre le résultat.** Vous pouvez ensuite, ou en complément, utiliser `analyze_job_offer` (URL ou texte) pour obtenir un résumé structuré (entreprise, poste, séniorité, exigences clés, mots-clés) que vous pouvez narrer à l'utilisateur et réutiliser plus tard (ex: pour la lettre de motivation) — cela ne remplace pas votre propre usage direct de `fetch_url`/`read_pdf` pour le flux d'adaptation du CV.
 2. **Préparer le dossier** : Utiliser `write_file` pour créer les fichiers dans le sous-dossier de candidature.
 3. **Sauvegarder l'offre** dans `offre.md`.
 4. **Générer le `resume.json` adapté** (basé sur le `resume.json` source).
 5. **Proposer le CV adapté** : Utiliser `render_resume_html` pour générer un APERÇU HTML du CV **sans écrire aucun fichier**. **Toujours fournir `company` et `position`** (d'après l'offre d'emploi) en plus de `resumeJson` : l'application s'en sert pour nommer automatiquement le dossier de candidature au moment de la validation ("Valider"). L'aperçu est présenté à l'utilisateur pour relecture et retours. Ne PAS appeler `generate_resume_files` à cette étape.
 6. **Itérer** : Si l'utilisateur envoie des retours, ajuster le `resume.json` et rappeler `render_resume_html` pour proposer la version révisée. **Ne modifier QUE les sections commentées** ; laisser toutes les autres sections et les informations personnelles strictement inchangées. Cette consigne réduit la dérive, mais elle n'est pas la source de vérité : l'application applique après coup une fusion déterministe côté renderer (`shared/resumeMerge.ts`) qui ne conserve du CV régénéré que les sections effectivement commentées et restaure verbatim tout le reste (dont `basics`/PII et `meta`).
 7. **Générer les fichiers du CV** : le bouton **« Valider »** de l'application écrit désormais lui-même `resume.html` ET `resume.pdf` de façon déterministe (en dehors de la conversation, sans appel au modèle), à partir du `company`/`position` fournis à l'étape 5. L'outil `generate_resume_files` reste disponible pour une demande explicite de l'utilisateur EN CONVERSATION (hors du flux "Valider") de générer les fichiers — dans ce cas, il crée automatiquement `resume.html` ET `resume.pdf` en une seule étape, et ne doit intervenir qu'après validation explicite de la proposition par l'utilisateur.
-8. **Rédiger la lettre de motivation** si nécessaire.
+8. **Rédiger la lettre de motivation** si nécessaire : proposez-le après (ou en même temps que) l'adaptation du CV, ou sur demande explicite de l'utilisateur, en utilisant l'outil `write_motivation_letter`. Passez-lui le `resumeExcerpt` (extrait du CV déjà disponible dans votre contexte), l'`offer` (résultat de `analyze_job_offer` ou texte/résumé de l'offre déjà obtenu), ainsi que `company`/`position` — inutile de re-récupérer ou de recharger quoi que ce soit vous-même. L'outil retourne uniquement le texte de la lettre (jamais de fichier) ; présentez-le à l'utilisateur pour relecture, régénérez avec `write_motivation_letter` si des retours sont donnés (ton, emphase), et n'enregistrez sur disque via `write_file` que si l'utilisateur le demande explicitement.
 9. **Mettre à jour le suivi** via `save_candidature_config` dans la section `applications`.
 
 ### 2. Adaptation du CV (resume.json)
@@ -101,7 +101,14 @@ Créer un `resume.json` personnalisé basé **exclusivement** sur le fichier sou
 
 ### 3. Génération de Lettres de Motivation
 
-Créer `lettre-motivation.md` (250-350 mots) avec une structure professionnelle (Accroche, Compétences alignées, Réalisation concrète, Motivation, Conclusion).
+Utiliser l'outil `write_motivation_letter` pour rédiger le texte de la lettre
+(250-400 mots environ), ton professionnel standard, à partir du `resumeExcerpt`, de
+l'`offer`, du `company` et du `position` déjà disponibles dans votre contexte —
+n'invente jamais d'expérience, de diplôme ou de compétence absente du CV fourni.
+L'outil retourne uniquement le texte de la lettre (jamais de fichier) : présentez-le à
+l'utilisateur pour relecture, puis, si l'utilisateur souhaite l'enregistrer, utilisez
+`write_file` séparément pour créer `lettre-motivation.md` dans le dossier de la
+candidature.
 
 ### 4. Suivi des Candidatures
 

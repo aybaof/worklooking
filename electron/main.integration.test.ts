@@ -1323,3 +1323,327 @@ describe("fetch_url tool (hidden→visible fallback, AC-1..10)", () => {
     expect(mockCreatedWindows).toHaveLength(2);
   });
 });
+
+// --- Specialist sub-agent tools (analyze_job_offer / write_motivation_letter) ---
+//
+// Both the outer chat turn AND the specialist's own turn call the SAME mocked
+// `AiClientRouter.getInstance().runChat` (mocked at module scope above), since
+// `runSubAgent()` delegates to the same router. `runChatImpl` below branches
+// on `options.systemPrompt` — a substring unique to each specialist prompt —
+// to distinguish the outer orchestrator turn from the nested specialist turn.
+describe("analyze_job_offer tool", () => {
+  it("raw text input never invokes fetch_url and returns the full structured success shape (AC-4, AC-5)", async () => {
+    let outerToolResult: unknown;
+    let nestedFetchAttempt: unknown;
+
+    runChatImpl = async (options) => {
+      if (
+        options.systemPrompt.includes("extraction structurée d'offres d'emploi")
+      ) {
+        // The specialist tries to call fetch_url anyway even though only
+        // `text` was given — allowedTools should be ["read_pdf"] only, so
+        // this must be rejected by the scoped runTool without ever reaching
+        // the real fetchUrl().
+        nestedFetchAttempt = await options.runTool("fetch_url", {
+          url: "https://should-not-be-fetched.example",
+        });
+        return {
+          content: JSON.stringify({
+            success: true,
+            company: "Doctolib",
+            position: "Développeur Fullstack",
+            seniority: "Confirmé",
+            keyRequirements: ["Node.js", "React"],
+            keywords: ["javascript", "typescript"],
+            summary: "Poste de développeur fullstack chez Doctolib.",
+          }),
+        };
+      }
+      outerToolResult = await options.runTool("analyze_job_offer", {
+        text: "Nous recherchons un développeur fullstack pour Doctolib...",
+      });
+      return { content: "voici le résumé de l'offre" };
+    };
+
+    await invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: {},
+      candidature: MIN_CANDIDATURE,
+    });
+
+    expect(outerToolResult).toEqual({
+      success: true,
+      company: "Doctolib",
+      position: "Développeur Fullstack",
+      seniority: "Confirmé",
+      keyRequirements: ["Node.js", "React"],
+      keywords: ["javascript", "typescript"],
+      summary: "Poste de développeur fullstack chez Doctolib.",
+    });
+    // The scoped runTool rejected the disallowed fetch_url attempt (real
+    // fetchUrl() was never reached).
+    expect((nestedFetchAttempt as { success: boolean }).success).toBe(false);
+  });
+
+  it("rejects invalid args (neither url nor text, or both) without consuming a sub-agent round", async () => {
+    let specialistInvoked = false;
+    let outerToolResult: unknown;
+
+    runChatImpl = async (options) => {
+      if (
+        options.systemPrompt.includes("extraction structurée d'offres d'emploi")
+      ) {
+        specialistInvoked = true;
+        return { content: "ne devrait jamais être appelé" };
+      }
+      outerToolResult = await options.runTool("analyze_job_offer", {});
+      return { content: "erreur" };
+    };
+
+    await invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: {},
+      candidature: MIN_CANDIDATURE,
+    });
+
+    expect(specialistInvoked).toBe(false);
+    expect((outerToolResult as { success: boolean; error?: string }).success).toBe(
+      false,
+    );
+  });
+
+  it("propagates a fetch_url hard error from inside the sub-loop as a structured failure without throwing (AC-6)", async () => {
+    mockLoadURLQueue.push(() =>
+      Promise.reject(new Error("net::ERR_NAME_NOT_RESOLVED")),
+    );
+
+    let outerToolResult: unknown;
+
+    runChatImpl = async (options) => {
+      if (
+        options.systemPrompt.includes("extraction structurée d'offres d'emploi")
+      ) {
+        const fetchResult = (await options.runTool("fetch_url", {
+          url: "https://does-not-resolve.invalid/jobs/999",
+        })) as { success: boolean; error?: string; errorCode?: string };
+        // Mirrors what the real specialist LLM would do per its own prompt:
+        // surface the tool's own structured failure as its final answer.
+        return {
+          content: JSON.stringify({
+            success: false,
+            error: fetchResult.error ?? "erreur inconnue",
+            errorCode: fetchResult.errorCode,
+          }),
+        };
+      }
+      outerToolResult = await options.runTool("analyze_job_offer", {
+        url: "https://does-not-resolve.invalid/jobs/999",
+      });
+      return { content: "désolé, une erreur est survenue" };
+    };
+
+    // Never throws all the way up through the AI_CHAT handler.
+    await expect(
+      invoke(Channels.AI_CHAT, {
+        messages: [],
+        apiKey: "k",
+        model: "m",
+        baseURL: "b",
+        resume: {},
+        candidature: MIN_CANDIDATURE,
+      }),
+    ).resolves.toBeDefined();
+
+    expect(outerToolResult).toEqual({
+      success: false,
+      error: "net::ERR_NAME_NOT_RESOLVED",
+      errorCode: ErrorCodes.FETCH_NETWORK_ERROR,
+    });
+  });
+
+  it("propagates FETCH_LOGIN_INCOMPLETE from inside the sub-loop after the hidden→visible fallback re-fetch also stalls, without throwing (AC-6)", async () => {
+    // Same constants/dance as the top-level "fetch_url tool" describe block's
+    // "re-fetch after Continue still needs auth (stuck again)" test above
+    // (~L1226), but driven through the nested `fetch_url` call inside
+    // `analyze_job_offer`'s own sub-loop instead of a direct top-level call —
+    // this is the specific gap the dev stage flagged as untested: the
+    // visible-browser-fallback path (not just an immediate hard fetch error)
+    // reached from inside the specialist's `runTool`.
+    const HIDDEN_LOAD_TIMEOUT_MS = 10_000;
+    const CONTINUE_POLL_INTERVAL_MS = 500;
+
+    vi.useFakeTimers();
+    try {
+      mockLoadURLQueue.push(() => new Promise<void>(() => {})); // hidden: never settles
+      mockLoadURLQueue.push(() => Promise.resolve()); // visible: loads fine
+
+      let outerToolResult: unknown;
+
+      runChatImpl = async (options) => {
+        if (
+          options.systemPrompt.includes(
+            "extraction structurée d'offres d'emploi",
+          )
+        ) {
+          const fetchResult = (await options.runTool("fetch_url", {
+            url: "https://example.com/jobs/123",
+          })) as { success: boolean; error?: string; errorCode?: string };
+          return {
+            content: JSON.stringify({
+              success: false,
+              error: fetchResult.error ?? "erreur inconnue",
+              errorCode: fetchResult.errorCode,
+            }),
+          };
+        }
+        outerToolResult = await options.runTool("analyze_job_offer", {
+          url: "https://example.com/jobs/123",
+        });
+        return { content: "désolé, une erreur est survenue" };
+      };
+
+      const invokePromise = invoke(Channels.AI_CHAT, {
+        messages: [],
+        apiKey: "k",
+        model: "m",
+        baseURL: "b",
+        resume: {},
+        candidature: MIN_CANDIDATURE,
+      });
+
+      // Hidden load stalls the full timeout — triggers the visible fallback
+      // window (2nd BrowserWindow constructed).
+      await vi.advanceTimersByTimeAsync(HIDDEN_LOAD_TIMEOUT_MS);
+      expect(mockCreatedWindows).toHaveLength(2);
+      const visibleWin = mockCreatedWindows[1];
+
+      // Queue the re-fetch (3rd window)'s loadURL to also never settle, so
+      // it hits the same stuck-load timeout again — the "still needs auth
+      // after Continue" scenario.
+      mockLoadURLQueue.push(() => new Promise<void>(() => {}));
+
+      visibleWin.webContents.__emit("did-finish-load");
+      visibleWin.webContents.__continueClicked = true;
+      await vi.advanceTimersByTimeAsync(CONTINUE_POLL_INTERVAL_MS);
+
+      expect(mockCreatedWindows).toHaveLength(3);
+
+      // The re-fetch stalls for the full timeout again — one shot only:
+      // fails immediately with FETCH_LOGIN_INCOMPLETE (no second visible
+      // window, no throw).
+      await vi.advanceTimersByTimeAsync(HIDDEN_LOAD_TIMEOUT_MS);
+
+      // Never throws all the way up through the AI_CHAT handler.
+      await expect(invokePromise).resolves.toBeDefined();
+      expect(mockCreatedWindows).toHaveLength(3);
+
+      expect(outerToolResult).toMatchObject({
+        success: false,
+        errorCode: ErrorCodes.FETCH_LOGIN_INCOMPLETE,
+      });
+      expect(
+        (outerToolResult as { error?: string }).error,
+      ).toEqual(expect.any(String));
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("write_motivation_letter tool", () => {
+  it("returns letter text with placeholders substituted from the source resume, writes no file (AC-11, AC-14)", async () => {
+    const sourceResume: Resume = {
+      basics: {
+        name: "Alice Dupont",
+        email: "alice@example.com",
+        phone: "0600000000",
+        location: { city: "Paris", postalCode: "75001", countryCode: "FR" },
+      },
+    };
+
+    const filesBefore = listFilesRecursive(TMP_ROOT);
+
+    let outerToolResult: unknown;
+    runChatImpl = async (options) => {
+      if (options.systemPrompt.includes("rédaction de lettres de motivation")) {
+        return {
+          content: [
+            "[Votre nom]",
+            "[Votre email]",
+            "[Votre téléphone]",
+            "[Votre adresse]",
+            "",
+            "Madame, Monsieur,",
+            "",
+            "Je vous écris pour vous exprimer mon intérêt pour ce poste.",
+          ].join("\n"),
+        };
+      }
+      outerToolResult = await options.runTool("write_motivation_letter", {
+        resumeExcerpt: { basics: { summary: "Développeur passionné." } },
+        offer: { company: "Doctolib", position: "Développeur Fullstack" },
+        company: "Doctolib",
+        position: "Développeur Fullstack",
+      });
+      return { content: "voici la lettre" };
+    };
+
+    await invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: sourceResume,
+      candidature: MIN_CANDIDATURE,
+    });
+
+    const result = outerToolResult as { success: boolean; letter?: string };
+    expect(result.success).toBe(true);
+    expect(result.letter).toContain("Alice Dupont");
+    expect(result.letter).toContain("alice@example.com");
+    expect(result.letter).toContain("0600000000");
+    expect(result.letter).not.toMatch(/\[Votre [^\]]*\]/);
+
+    // No file was ever written as a side effect of this tool (AC-14).
+    const filesAfter = listFilesRecursive(TMP_ROOT);
+    expect(filesAfter).toEqual(filesBefore);
+  });
+
+  it("rejects missing company/position without invoking the specialist (allowedTools is empty either way)", async () => {
+    let specialistInvoked = false;
+    let outerToolResult: unknown;
+
+    runChatImpl = async (options) => {
+      if (options.systemPrompt.includes("rédaction de lettres de motivation")) {
+        specialistInvoked = true;
+        return { content: "ne devrait jamais être appelé" };
+      }
+      outerToolResult = await options.runTool("write_motivation_letter", {
+        resumeExcerpt: {},
+        offer: "",
+        company: "",
+        position: "",
+      });
+      return { content: "erreur" };
+    };
+
+    await invoke(Channels.AI_CHAT, {
+      messages: [],
+      apiKey: "k",
+      model: "m",
+      baseURL: "b",
+      resume: {},
+      candidature: MIN_CANDIDATURE,
+    });
+
+    expect(specialistInvoked).toBe(false);
+    expect((outerToolResult as { success: boolean }).success).toBe(false);
+  });
+});

@@ -27,6 +27,12 @@ import { IPCError, validateAndSanitizePath } from "./lib/paths";
 import { detectsAuthRequired } from "./lib/auth-detect";
 import { shouldFallBackToVisible } from "./lib/fetch-fallback";
 import { deriveCandidatureFolderSegment } from "./lib/candidature-folder";
+import { runSubAgent } from "./agent/subAgent";
+import {
+  buildAnalyzeJobOfferPrompt,
+  buildWriteMotivationLetterPrompt,
+} from "./agent/specialistPrompts";
+import { substituteLetterPlaceholders } from "./lib/letterPlaceholders";
 
 // Only check for updates in production
 if (app.isPackaged) {
@@ -978,6 +984,64 @@ async function generateResumeArtifacts({
   }
 }
 
+// --- `analyze_job_offer` result shapes + type guards ---
+
+interface AnalyzeJobOfferSuccess {
+  success: true;
+  company: string;
+  position: string;
+  seniority: string;
+  keyRequirements: string[];
+  keywords: string[];
+  summary: string;
+}
+
+interface AnalyzeJobOfferFailure {
+  success: false;
+  error: string;
+  errorCode?: string;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
+}
+
+/** Validates the specialist's structured SUCCESS JSON shape (spec §"in scope" 1). */
+function isAnalyzeJobOfferSuccess(
+  value: unknown,
+): value is AnalyzeJobOfferSuccess {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    v.success === true &&
+    typeof v.company === "string" &&
+    typeof v.position === "string" &&
+    typeof v.seniority === "string" &&
+    isStringArray(v.keyRequirements) &&
+    isStringArray(v.keywords) &&
+    typeof v.summary === "string"
+  );
+}
+
+/**
+ * Validates the specialist's structured FAILURE JSON shape. Kept distinct
+ * from `isAnalyzeJobOfferSuccess` so a legitimate structured failure
+ * produced by the specialist itself (e.g. after a `fetch_url` error) is
+ * passed through with its `error`/`errorCode` intact, rather than being
+ * discarded as "invalid response".
+ */
+function isAnalyzeJobOfferFailure(
+  value: unknown,
+): value is AnalyzeJobOfferFailure {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    v.success === false &&
+    typeof v.error === "string" &&
+    (v.errorCode === undefined || typeof v.errorCode === "string")
+  );
+}
+
 async function executeTool(
   name: string,
   args: any,
@@ -985,6 +1049,17 @@ async function executeTool(
   sourceResume?: Resume,
   sourceConfig?: CandidatureConfig,
   selectedTheme?: string,
+  // Credentials the specialist sub-agent tools (`analyze_job_offer`,
+  // `write_motivation_letter`) reuse to call `runSubAgent()` — the SAME
+  // apiKey/model/baseURL/api as the main conversation. Optional/defensive:
+  // if ever undefined, the two specialist cases below return a structured
+  // failure instead of crashing.
+  providerCtx?: {
+    apiKey: string;
+    model: string;
+    baseURL: string;
+    api?: ProviderApi;
+  },
 ): Promise<{
   result: unknown;
   updatedResume?: Resume;
@@ -1105,6 +1180,146 @@ async function executeTool(
     case "read_pdf":
       result = await readPdf(args.filePath);
       break;
+    case "analyze_job_offer": {
+      const hasUrl = typeof args.url === "string" && args.url.trim().length > 0;
+      const hasText =
+        typeof args.text === "string" && args.text.trim().length > 0;
+
+      if (hasUrl === hasText) {
+        // Both provided, or neither: invalid args. No sub-agent round consumed.
+        result = {
+          success: false,
+          error:
+            "Fournir exactement l'un des deux champs 'url' ou 'text' (jamais les deux, jamais aucun).",
+        };
+        break;
+      }
+
+      if (!providerCtx) {
+        result = {
+          success: false,
+          error: "Configuration du fournisseur IA indisponible pour ce sous-agent.",
+        };
+        break;
+      }
+
+      const allowedTools = hasUrl ? ["fetch_url", "read_pdf"] : ["read_pdf"];
+
+      // Scoped runTool: calls the existing fetchUrl()/readPdf() functions
+      // directly (NOT a recursive call into executeTool(), and NOT through
+      // runChatLoop's tool:status-emitting wrapper), so nested specialist
+      // tool execution is naturally silent.
+      const scopedRunTool = async (
+        toolName: string,
+        toolArgs: Record<string, unknown>,
+      ): Promise<unknown> => {
+        if (toolName === "fetch_url" && allowedTools.includes("fetch_url")) {
+          return fetchUrl(String(toolArgs.url ?? ""), {
+            waitForSelector:
+              typeof toolArgs.waitForSelector === "string"
+                ? toolArgs.waitForSelector
+                : undefined,
+          });
+        }
+        if (toolName === "read_pdf" && allowedTools.includes("read_pdf")) {
+          return readPdf(String(toolArgs.filePath ?? ""));
+        }
+        return {
+          success: false,
+          error: `Outil "${toolName}" non disponible pour ce sous-agent.`,
+        };
+      };
+
+      const subResult = await runSubAgent({
+        apiKey: providerCtx.apiKey,
+        model: providerCtx.model,
+        baseURL: providerCtx.baseURL,
+        api: providerCtx.api,
+        systemPrompt: buildAnalyzeJobOfferPrompt(),
+        userInput: hasUrl ? String(args.url) : String(args.text),
+        allowedTools,
+        runTool: scopedRunTool,
+      });
+
+      if (!subResult.success) {
+        result = {
+          success: false,
+          error: subResult.error ?? "Échec de l'analyse de l'offre.",
+        };
+        break;
+      }
+
+      try {
+        const parsed: unknown = JSON.parse(subResult.content ?? "");
+        if (isAnalyzeJobOfferSuccess(parsed) || isAnalyzeJobOfferFailure(parsed)) {
+          result = parsed;
+        } else {
+          result = { success: false, error: "Réponse du sous-agent invalide." };
+        }
+      } catch {
+        result = { success: false, error: "Réponse du sous-agent invalide." };
+      }
+      break;
+    }
+    case "write_motivation_letter": {
+      const hasCompany =
+        typeof args.company === "string" && args.company.trim().length > 0;
+      const hasPosition =
+        typeof args.position === "string" && args.position.trim().length > 0;
+
+      if (!hasCompany || !hasPosition) {
+        result = {
+          success: false,
+          error: "Les champs 'company' et 'position' sont requis.",
+        };
+        break;
+      }
+
+      if (!providerCtx) {
+        result = {
+          success: false,
+          error: "Configuration du fournisseur IA indisponible pour ce sous-agent.",
+        };
+        break;
+      }
+
+      const userInput = JSON.stringify({
+        resumeExcerpt: args.resumeExcerpt,
+        offer: args.offer,
+        company: args.company,
+        position: args.position,
+      });
+
+      const subResult = await runSubAgent({
+        apiKey: providerCtx.apiKey,
+        model: providerCtx.model,
+        baseURL: providerCtx.baseURL,
+        api: providerCtx.api,
+        systemPrompt: buildWriteMotivationLetterPrompt(),
+        userInput,
+        allowedTools: [],
+        runTool: async () => ({
+          success: false,
+          error: "Aucun outil disponible pour ce sous-agent.",
+        }),
+      });
+
+      if (!subResult.success || !subResult.content) {
+        result = {
+          success: false,
+          error:
+            subResult.error ?? "Échec de la rédaction de la lettre de motivation.",
+        };
+        break;
+      }
+
+      const finalText = substituteLetterPlaceholders(
+        subResult.content,
+        sourceResume?.basics,
+      );
+      result = { success: true, letter: finalText };
+      break;
+    }
     default:
       result = { error: `Unknown tool: ${name}` };
   }
@@ -1171,6 +1386,7 @@ async function runChatLoop(
         resume,
         candidature,
         ctx.selectedTheme,
+        { apiKey: ctx.apiKey, model: ctx.model, baseURL: ctx.baseURL, api: ctx.api },
       );
 
     if (updatedResume) {
