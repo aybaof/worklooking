@@ -38,7 +38,6 @@ body {
 
 .resume {
   display: flex;
-  height: 100%;
   width: 100%;
   min-height: 100vh;
 }
@@ -278,11 +277,9 @@ body {
 @media print {
   html,
   body {
-    height: 297mm; /* A4 Height */
     width: 210mm; /* A4 Width */
     margin: 0;
     padding: 0;
-    overflow: hidden;
   }
 
   body {
@@ -291,17 +288,8 @@ body {
     print-color-adjust: exact;
   }
 
-  .resume {
-    height: 100%;
-    width: 100%;
-    overflow: hidden;
-  }
-
-  .sidebar {
-    height: 100%;
-  }
-
-  .main-content {
-    height: 100%;
+  .entry {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
   }
 }

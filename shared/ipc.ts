@@ -1,6 +1,7 @@
 import { CandidatureConfig } from "./candidature-types";
 import { Resume } from "./resume-types";
 import { ProviderApi } from "./provider-types";
+import { PageMode } from "./pageFit";
 
 // Channel definitions
 export const Channels = {
@@ -81,6 +82,7 @@ export interface IPCHandlers {
       resume: Resume;
       candidature: CandidatureConfig;
       selectedTheme?: string;
+      selectedPageMode?: PageMode;
     };
     response: {
       content?: string;
@@ -107,6 +109,7 @@ export interface IPCHandlers {
     request: {
       resumeJson: Resume;
       themeName: string;
+      pageMode?: PageMode;
     };
     response: {
       html?: string;
@@ -119,6 +122,7 @@ export interface IPCHandlers {
       company: string;
       position: string;
       themeName?: string;
+      pageMode?: PageMode;
     };
     response: {
       success: boolean;

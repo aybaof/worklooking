@@ -17,7 +17,8 @@
     "test:ui": "vitest --ui",
     "test:node": "vitest run --project node",
     "test:renderer": "vitest run --project renderer",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p electron/tsconfig.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p electron/tsconfig.json",
+    "verify:pdf": "cross-env WORKLOOKING_VERIFY_PDF_SCRIPT=1 electron -r tsx/cjs -r ./scripts/register-raw-loaders.cjs ./scripts/verify-multipage-pdf.ts"
   },
   "author": "Aymeric Barakat",
   "description": "WorkLooking Agent - AI-powered resume and job application assistant",

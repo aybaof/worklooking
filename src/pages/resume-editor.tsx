@@ -234,6 +234,8 @@ export default function ResumeEditorPage({
                     selectedTheme={templateSelection.selectedTheme}
                     availableThemes={templateSelection.availableThemes}
                     onSelectTheme={templateSelection.setSelectedTheme}
+                    pageMode={templateSelection.selectedPageMode}
+                    onSelectPageMode={templateSelection.setSelectedPageMode}
                     renderPreview={templateSelection.renderPreview}
                   />
                 )}

@@ -21,6 +21,7 @@ import { themes, ThemeName } from "./themes/index";
 import { Channels, ErrorCodes } from "../shared/ipc";
 import { Resume } from "../shared/resume-types";
 import { CandidatureConfig } from "../shared/candidature-types";
+import { PageMode, A4_HEIGHT_PX, MIN_FIT_SCALE } from "../shared/pageFit";
 import { updateElectronApp } from "update-electron-app";
 import { processImage } from "./utils/image-processor";
 import { IPCError, validateAndSanitizePath } from "./lib/paths";
@@ -97,6 +98,7 @@ interface ResumeArgs {
 interface PdfArgs {
   htmlPath: string;
   pdfPath: string;
+  pageMode?: PageMode;
 }
 
 interface ChatArgs {
@@ -108,6 +110,7 @@ interface ChatArgs {
   resume: Resume;
   candidature: CandidatureConfig;
   selectedTheme?: string;
+  selectedPageMode?: PageMode;
 }
 
 interface FetchUrlResult {
@@ -554,9 +557,10 @@ async function readPdf(
   }
 }
 
-async function generatePdf({
+export async function generatePdf({
   htmlPath,
   pdfPath,
+  pageMode,
 }: PdfArgs): Promise<{ success: boolean; path?: string; error?: string }> {
   try {
     const fullHtmlPath = validateAndSanitizePath(htmlPath, USER_DATA_PATH);
@@ -564,6 +568,58 @@ async function generatePdf({
 
     const workerWin = new BrowserWindow({ show: false });
     await workerWin.loadFile(fullHtmlPath);
+
+    if (pageMode === "one-page") {
+      // Shrink the rendered content to fit one A4 page (uniform scale,
+      // floored at MIN_FIT_SCALE to keep text readable) — mirrors the SAME
+      // measure/scale math the live preview applies client-side
+      // (`PreviewFrame`/`shared/pageFit.ts`), so the exported PDF always
+      // matches what the user saw.
+      await workerWin.webContents.executeJavaScript(`
+        (function () {
+          var body = document.body;
+          var pageHeightPx = ${A4_HEIGHT_PX};
+          // Sidebar-split themes (e.g. modern-sidebar) are detected
+          // structurally (".sidebar" + ".main-content" inside ".resume"),
+          // matching the SAME check used by the live preview
+          // (PreviewFrame.tsx), so the exported PDF always matches what the
+          // user saw. Scaling the whole body would shrink the decorative
+          // sidebar column too; instead only ".main-content" is scaled, and
+          // ".resume" is pinned to exactly one A4 page height so ".sidebar"
+          // (align-items: stretch, the default) stays full-height/unscaled.
+          var mainContent = document.querySelector(".main-content");
+          var sidebar = document.querySelector(".sidebar");
+          var resumeEl = document.querySelector(".resume");
+          if (mainContent && sidebar && resumeEl) {
+            var mainNatural = mainContent.scrollHeight;
+            if (mainNatural > pageHeightPx) {
+              var mainScale = Math.max(pageHeightPx / mainNatural, ${MIN_FIT_SCALE});
+              var naturalWidth = mainContent.getBoundingClientRect().width;
+              mainContent.style.flex = "none";
+              mainContent.style.transformOrigin = "top left";
+              mainContent.style.transform = "scale(" + mainScale + ")";
+              mainContent.style.width = (naturalWidth / mainScale) + "px";
+              // mainScale is floored at MIN_FIT_SCALE, so scaled content may
+              // still exceed one page. Pinning ".resume" to exactly one page
+              // in that case would let ".main-content" overflow past it
+              // (spilling onto a blank second page). Grow ".resume" to match
+              // the actual scaled height instead, so ".sidebar" stays full
+              // height with no gap.
+              var scaledHeight = Math.max(pageHeightPx, mainNatural * mainScale);
+              resumeEl.style.height = scaledHeight + "px";
+            }
+          } else {
+            var natural = body.scrollHeight;
+            if (natural > pageHeightPx) {
+              var scale = Math.max(pageHeightPx / natural, ${MIN_FIT_SCALE});
+              body.style.transformOrigin = "top left";
+              body.style.transform = "scale(" + scale + ")";
+              body.style.width = (210 / scale) + "mm";
+            }
+          }
+        })();
+      `);
+    }
 
     const data = await workerWin.webContents.printToPDF({
       pageSize: "A4",
@@ -743,11 +799,13 @@ ipcMain.handle(
       company,
       position,
       themeName,
+      pageMode,
     }: {
       resumeJson: Resume;
       company: string;
       position: string;
       themeName?: string;
+      pageMode?: PageMode;
     },
   ) => {
     try {
@@ -771,6 +829,7 @@ ipcMain.handle(
         htmlPath,
         pdfPath,
         themeName,
+        pageMode,
       });
 
       if (!genResult.success) {
@@ -890,12 +949,14 @@ async function generateResumeArtifacts({
   htmlPath,
   pdfPath,
   themeName,
+  pageMode,
 }: {
   resumeJson: Resume;
   sourceBasics: ResumeBasics | undefined;
   htmlPath: string;
   pdfPath: string;
   themeName?: string;
+  pageMode?: PageMode;
 }): Promise<{
   success: boolean;
   message?: string;
@@ -944,6 +1005,7 @@ async function generateResumeArtifacts({
       pdfWriteResult = await generatePdf({
         htmlPath,
         pdfPath,
+        pageMode,
       });
 
       if (!pdfWriteResult.success) {
@@ -1049,6 +1111,7 @@ async function executeTool(
   sourceResume?: Resume,
   sourceConfig?: CandidatureConfig,
   selectedTheme?: string,
+  selectedPageMode?: PageMode,
   // Credentials the specialist sub-agent tools (`analyze_job_offer`,
   // `write_motivation_letter`) reuse to call `runSubAgent()` — the SAME
   // apiKey/model/baseURL/api as the main conversation. Optional/defensive:
@@ -1095,6 +1158,7 @@ async function executeTool(
         htmlPath: args.htmlPath,
         pdfPath: args.pdfPath,
         themeName: selectedTheme,
+        pageMode: selectedPageMode,
       });
       break;
     case "render_resume_html":
@@ -1347,6 +1411,7 @@ async function runChatLoop(
     resume: Resume;
     candidature: CandidatureConfig;
     selectedTheme?: string;
+    selectedPageMode?: PageMode;
   },
   event: IpcMainInvokeEvent,
 ): Promise<{
@@ -1386,6 +1451,7 @@ async function runChatLoop(
         resume,
         candidature,
         ctx.selectedTheme,
+        ctx.selectedPageMode,
         { apiKey: ctx.apiKey, model: ctx.model, baseURL: ctx.baseURL, api: ctx.api },
       );
 
@@ -1509,8 +1575,20 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
+// Skip the real-app window lifecycle when running under
+// `npm run verify:pdf` (scripts/verify-multipage-pdf.ts): that script imports
+// this module directly via plain `tsx`/`electron -r tsx/cjs`, outside of
+// Forge's Vite bundling, so `createWindow()`'s reference to the build-time-only
+// `MAIN_WINDOW_VITE_DEV_SERVER_URL` global would throw, and more importantly
+// `window-all-closed` would fire `app.quit()` the first time the verify
+// script closes its own worker window (there being zero windows open at that
+// instant on non-darwin platforms), killing the process before its later
+// assertions run. No behavior change for the real app (`npm run dev` /
+// packaged builds), where this env var is never set.
+if (!process.env.WORKLOOKING_VERIFY_PDF_SCRIPT) {
+  app.whenReady().then(createWindow);
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+}

@@ -69,6 +69,7 @@ describe("useTemplateSelection", () => {
     expect(api.invoke).toHaveBeenCalledWith(Channels.RESUME_RENDER_PREVIEW, {
       resumeJson: resume,
       themeName: "professional",
+      pageMode: "multi-page",
     });
     expect(html).toBe("<div>preview</div>");
   });

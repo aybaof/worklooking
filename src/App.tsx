@@ -70,6 +70,7 @@ export default function App() {
     resume: resume.resume,
     candidature: candidature.config,
     selectedTheme: templateSelection.selectedTheme,
+    selectedPageMode: templateSelection.selectedPageMode,
     onCandidatureUpdate: candidature.setCandidatureByAi,
     onTailoredResume: (tailored, company, position) => {
       setFeedbackResume(tailored);
@@ -80,6 +81,7 @@ export default function App() {
 
   const feedback = useFeedbackLoop({
     defaultTheme: templateSelection.selectedTheme,
+    defaultPageMode: templateSelection.selectedPageMode,
     initialResume: feedbackResume,
     initialCompany: feedbackCompany,
     initialPosition: feedbackPosition,
@@ -87,6 +89,7 @@ export default function App() {
     renderPreview: templateSelection.renderPreview,
     onValidated: resume.setResumeByAi,
     onThemeValidated: templateSelection.setSelectedTheme,
+    onPageModeValidated: templateSelection.setSelectedPageMode,
     onFullValidationSuccess: ({ company, position, htmlPath, pdfPath }) => {
       chat.setMessages((prev) => [
         ...prev,
@@ -275,6 +278,8 @@ export default function App() {
             selectedTheme={feedback.selectedTheme}
             availableThemes={templateSelection.availableThemes}
             onSelectTheme={feedback.setSelectedTheme}
+            pageMode={feedback.pageMode}
+            onSelectPageMode={feedback.setPageMode}
             renderThemePreview={templateSelection.renderPreview}
             setComment={feedback.setComment}
             clearComment={feedback.clearComment}

@@ -35,11 +35,13 @@ describe("useFeedbackLoop (modal)", () => {
   ) {
     return {
       defaultTheme: "modern-sidebar",
+      defaultPageMode: "multi-page" as const,
       initialResume: seedResume,
       sendFeedbackMessage: vi.fn().mockResolvedValue({ resume: null }),
       renderPreview: vi.fn().mockResolvedValue("<div>preview</div>"),
       onValidated: vi.fn(),
       onThemeValidated: vi.fn(),
+      onPageModeValidated: vi.fn(),
       onClose: vi.fn(),
       ...overrides,
     };
@@ -833,7 +835,11 @@ describe("useFeedbackLoop (modal)", () => {
       act(() => result.current.setSelectedTheme("elegant"));
 
       await waitFor(() =>
-        expect(renderPreview).toHaveBeenCalledWith("elegant", seedResume),
+        expect(renderPreview).toHaveBeenCalledWith(
+          "elegant",
+          seedResume,
+          "multi-page",
+        ),
       );
       await waitFor(() =>
         expect(result.current.previewHtml).toBe("<div>autre thème</div>"),

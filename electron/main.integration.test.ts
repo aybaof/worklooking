@@ -781,6 +781,37 @@ describe("RESUME_GENERATE_FINAL handler", () => {
     expect(fs.existsSync(expectedPdfPath)).toBe(true);
   });
 
+  it("pageMode: 'one-page' injects the fit-to-page shrink script before printToPDF; the default does not", async () => {
+    const resumeJson: Resume = { basics: { name: "One Page" } };
+
+    await invoke(Channels.RESUME_GENERATE_FINAL, {
+      resumeJson,
+      company: "NoShrinkCo",
+      position: "Dev",
+      themeName: "professional",
+    });
+    const noShrinkWindow = mockCreatedWindows[mockCreatedWindows.length - 1];
+    expect(
+      noShrinkWindow.webContents.executeJavaScript.mock.calls.some(([script]) =>
+        typeof script === "string" && script.includes("scale("),
+      ),
+    ).toBe(false);
+
+    await invoke(Channels.RESUME_GENERATE_FINAL, {
+      resumeJson,
+      company: "ShrinkCo",
+      position: "Dev",
+      themeName: "professional",
+      pageMode: "one-page",
+    });
+    const shrinkWindow = mockCreatedWindows[mockCreatedWindows.length - 1];
+    expect(
+      shrinkWindow.webContents.executeJavaScript.mock.calls.some(([script]) =>
+        typeof script === "string" && script.includes("scale("),
+      ),
+    ).toBe(true);
+  });
+
   it("reuses the SAME render/write/PII-restore code path as generate_resume_files (byte-identical HTML) (AC-5)", async () => {
     const sourceResume: Resume = {
       basics: {

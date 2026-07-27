@@ -230,17 +230,20 @@ a:hover {
 @media print {
   html,
   body {
-    height: 297mm;
     width: 210mm;
     margin: 0;
     padding: 0;
-    overflow: hidden;
   }
 
   body {
     font-size: 9.5pt;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  .entry {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
   }
 
   .resume {

@@ -5,10 +5,12 @@ import { Resume } from "@/../shared/resume-types";
 import { ResumeFieldChange } from "@/../shared/resumeDiff";
 import { ValidationResult } from "@/hooks/useFeedbackLoop";
 import { ThemeInfo } from "@/hooks/useTemplateSelection";
+import { PageMode } from "@/../shared/pageFit";
 import { PreviewFrame } from "@/components/feedback-loop/PreviewFrame";
 import { SectionPinRail } from "@/components/feedback-loop/SectionPinRail";
 import { CommentPopover } from "@/components/feedback-loop/CommentPopover";
 import { ThemePickerRail } from "@/components/feedback-loop/ThemePickerRail";
+import { PageModeToggle } from "@/components/feedback-loop/PageModeToggle";
 import { RegenControls } from "@/components/feedback-loop/RegenControls";
 import { RoundDiffPanel } from "@/components/feedback-loop/RoundDiffPanel";
 import { UnsavedCommentsConfirm } from "@/components/feedback-loop/UnsavedCommentsConfirm";
@@ -33,6 +35,9 @@ interface FeedbackModalProps {
   selectedTheme: string;
   availableThemes: ThemeInfo[];
   onSelectTheme: (themeId: string) => void;
+  /** The modal's currently selected page mode (owned by `useFeedbackLoop`). */
+  pageMode: PageMode;
+  onSelectPageMode: (pageMode: PageMode) => void;
   /** Reused from `useTemplateSelection.renderPreview` — no IPC contract change. */
   renderThemePreview: (themeName: string, resume: Resume) => Promise<string>;
   setComment: (sectionId: string, value: string) => void;
@@ -66,6 +71,8 @@ export function FeedbackModal({
   selectedTheme,
   availableThemes,
   onSelectTheme,
+  pageMode,
+  onSelectPageMode,
   renderThemePreview,
   setComment,
   clearComment,
@@ -187,6 +194,12 @@ export function FeedbackModal({
               renderPreview={renderThemePreview}
             />
 
+            <PageModeToggle
+              pageMode={pageMode}
+              disabled={isRegenerating}
+              onChange={onSelectPageMode}
+            />
+
             <RegenControls
               isRegenerating={isRegenerating}
               hasComments={hasComments}
@@ -214,7 +227,11 @@ export function FeedbackModal({
           </aside>
 
           <section className="flex min-h-0 flex-1 overflow-hidden p-4">
-            <PreviewFrame html={previewHtml} isLoading={isPreviewLoading} />
+            <PreviewFrame
+              html={previewHtml}
+              isLoading={isPreviewLoading}
+              pageMode={pageMode}
+            />
           </section>
         </div>
       </div>

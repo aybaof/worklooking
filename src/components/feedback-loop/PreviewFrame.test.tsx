@@ -12,7 +12,7 @@ import { PreviewFrame } from "./PreviewFrame";
 
 describe("PreviewFrame (true-scale + scroll)", () => {
   it("renders the iframe at its natural A4 page width (no fit-scaling)", () => {
-    render(<PreviewFrame html="<div>aperçu</div>" isLoading={false} />);
+    render(<PreviewFrame html="<div>aperçu</div>" isLoading={false} pageMode="multi-page" />);
 
     const iframe = screen.getByTitle("Aperçu du CV") as HTMLIFrameElement;
     // True 100% scale: the page is a fixed 210mm-wide A4 page, NOT aspect-locked
@@ -26,7 +26,7 @@ describe("PreviewFrame (true-scale + scroll)", () => {
 
   it("scrolls to fit via an overflow-auto container and does NOT aspect-lock", () => {
     const { container } = render(
-      <PreviewFrame html="<div>aperçu</div>" isLoading={false} />,
+      <PreviewFrame html="<div>aperçu</div>" isLoading={false} pageMode="multi-page" />,
     );
 
     // Outer container scrolls (multi-page CV scrolls like the real PDF).
@@ -49,14 +49,16 @@ describe("PreviewFrame (true-scale + scroll)", () => {
   });
 
   it("keeps the sandboxed iframe when html is present", () => {
-    render(<PreviewFrame html="<div>aperçu</div>" isLoading={false} />);
+    render(<PreviewFrame html="<div>aperçu</div>" isLoading={false} pageMode="multi-page" />);
 
     const iframe = screen.getByTitle("Aperçu du CV") as HTMLIFrameElement;
     expect(iframe.getAttribute("sandbox")).toBe("allow-same-origin");
   });
 
   it("shows the spinner while loading and renders no page when html is empty", () => {
-    const { container } = render(<PreviewFrame html="" isLoading={true} />);
+    const { container } = render(
+      <PreviewFrame html="" isLoading={true} pageMode="multi-page" />,
+    );
     expect(container.querySelector(".animate-spin")).not.toBeNull();
     // No iframe/page box without html.
     expect(screen.queryByTitle("Aperçu du CV")).toBeNull();

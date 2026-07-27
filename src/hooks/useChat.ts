@@ -9,6 +9,7 @@ import {
 import { Resume } from "@/../shared/resume-types";
 import { CandidatureConfig } from "@/../shared/candidature-types";
 import { ProviderApi } from "@/../shared/provider-types";
+import { PageMode } from "@/../shared/pageFit";
 
 interface UseChatOptions {
   apiKey: string;
@@ -18,6 +19,7 @@ interface UseChatOptions {
   resume: Resume;
   candidature: CandidatureConfig;
   selectedTheme?: string;
+  selectedPageMode?: PageMode;
   onCandidatureUpdate: (config: CandidatureConfig) => void;
   /**
    * Called when a tailoring turn returns an `updatedResume`. The main renderer
@@ -41,6 +43,7 @@ export function useChat({
   resume,
   candidature,
   selectedTheme,
+  selectedPageMode,
   onCandidatureUpdate,
   onTailoredResume,
 }: UseChatOptions) {
@@ -148,6 +151,7 @@ export function useChat({
           resume,
           candidature,
           selectedTheme,
+          selectedPageMode,
         });
 
         if (response.error) {
@@ -196,6 +200,7 @@ export function useChat({
       resume,
       candidature,
       selectedTheme,
+      selectedPageMode,
       onCandidatureUpdate,
     ],
   );

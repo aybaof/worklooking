@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { Channels } from "@/../shared/ipc";
 import { Resume } from "@/../shared/resume-types";
+import { PageMode } from "@/../shared/pageFit";
 
 export interface ThemeInfo {
   id: string;
@@ -10,6 +11,9 @@ export interface ThemeInfo {
 
 const STORAGE_KEY = "worklooking_selected_theme";
 const DEFAULT_THEME = "modern-sidebar";
+
+const PAGE_MODE_STORAGE_KEY = "worklooking_page_mode";
+const DEFAULT_PAGE_MODE: PageMode = "multi-page";
 
 export const availableThemes: ThemeInfo[] = [
   {
@@ -80,9 +84,23 @@ function loadSelectedTheme(): string {
   return DEFAULT_THEME;
 }
 
+function loadSelectedPageMode(): PageMode {
+  try {
+    const stored = localStorage.getItem(PAGE_MODE_STORAGE_KEY);
+    if (stored === "one-page" || stored === "multi-page") {
+      return stored;
+    }
+  } catch {
+    // localStorage unavailable
+  }
+  return DEFAULT_PAGE_MODE;
+}
+
 export function useTemplateSelection() {
   const [selectedTheme, setSelectedThemeState] =
     useState<string>(loadSelectedTheme);
+  const [selectedPageMode, setSelectedPageModeState] =
+    useState<PageMode>(loadSelectedPageMode);
 
   const setSelectedTheme = useCallback((themeId: string) => {
     setSelectedThemeState(themeId);
@@ -93,11 +111,25 @@ export function useTemplateSelection() {
     }
   }, []);
 
+  const setSelectedPageMode = useCallback((pageMode: PageMode) => {
+    setSelectedPageModeState(pageMode);
+    try {
+      localStorage.setItem(PAGE_MODE_STORAGE_KEY, pageMode);
+    } catch {
+      // localStorage unavailable
+    }
+  }, []);
+
   const renderPreview = useCallback(
-    async (themeName: string, resumeJson: Resume): Promise<string> => {
+    async (
+      themeName: string,
+      resumeJson: Resume,
+      pageMode: PageMode = DEFAULT_PAGE_MODE,
+    ): Promise<string> => {
       const response = await window.api.invoke(Channels.RESUME_RENDER_PREVIEW, {
         resumeJson,
         themeName,
+        pageMode,
       });
       if (response.error) {
         throw new Error(response.error);
@@ -110,6 +142,8 @@ export function useTemplateSelection() {
   return {
     selectedTheme,
     setSelectedTheme,
+    selectedPageMode,
+    setSelectedPageMode,
     availableThemes,
     renderPreview,
   };

@@ -46,6 +46,8 @@ function baseProps(overrides: Partial<Parameters<typeof FeedbackModal>[0]> = {})
       { id: "professional", label: "Professional", description: "" },
     ],
     onSelectTheme: vi.fn(),
+    pageMode: "multi-page" as const,
+    onSelectPageMode: vi.fn(),
     renderThemePreview: vi.fn().mockResolvedValue("<div>aperçu</div>"),
     setComment: vi.fn(),
     clearComment: vi.fn(),

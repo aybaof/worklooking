@@ -7,6 +7,7 @@ import {
 } from "@/../shared/feedbackMessages";
 import { diffResumes, ResumeFieldChange } from "@/../shared/resumeDiff";
 import { mergeScopedResume } from "@/../shared/resumeMerge";
+import { PageMode } from "@/../shared/pageFit";
 
 /**
  * Result of a successful deterministic Valider write (`resume:generate-final`),
@@ -28,6 +29,12 @@ interface UseFeedbackLoopOptions {
    * `selectedTheme` state (see below).
    */
   defaultTheme: string;
+  /**
+   * App-wide default page mode from `useTemplateSelection`, used the SAME
+   * way as `defaultTheme` — seeds the modal's own local `pageMode` on each
+   * reseed, promoted back to the app default via `onPageModeValidated`.
+   */
+  defaultPageMode: PageMode;
   /**
    * The tailored resume that opened the loop, or `null` when the modal is
    * closed. Changing this to a new resume (re)seeds the loop.
@@ -59,7 +66,11 @@ interface UseFeedbackLoopOptions {
    * (`ThemePickerRail`) — no duplicated `Channels.RESUME_RENDER_PREVIEW` call
    * sites.
    */
-  renderPreview: (themeName: string, resume: Resume) => Promise<string>;
+  renderPreview: (
+    themeName: string,
+    resume: Resume,
+    pageMode: PageMode,
+  ) => Promise<string>;
   /** Persist the validated resume (existing `useResume` auto-save owner). */
   onValidated: (resume: Resume) => void;
   /**
@@ -70,6 +81,11 @@ interface UseFeedbackLoopOptions {
    * (`submitComments`), or `close()`.
    */
   onThemeValidated: (themeId: string) => void;
+  /**
+   * Called ONLY on a successful `validate()`, with the modal's currently
+   * selected page mode, mirroring `onThemeValidated` exactly.
+   */
+  onPageModeValidated: (pageMode: PageMode) => void;
   /**
    * Called ONLY on a FULL `validate()` success — `response.pdfPath` present
    * AND `response.error` absent (the SAME condition that triggers auto-close,
@@ -130,6 +146,7 @@ interface UseFeedbackLoopOptions {
  */
 export function useFeedbackLoop({
   defaultTheme,
+  defaultPageMode,
   initialResume,
   initialCompany,
   initialPosition,
@@ -137,11 +154,13 @@ export function useFeedbackLoop({
   renderPreview,
   onValidated,
   onThemeValidated,
+  onPageModeValidated,
   onFullValidationSuccess,
   onClose,
 }: UseFeedbackLoopOptions) {
   const [resume, setResume] = useState<Resume | null>(initialResume);
   const [selectedTheme, setSelectedTheme] = useState<string>(defaultTheme);
+  const [pageMode, setPageMode] = useState<PageMode>(defaultPageMode);
   const [comments, setComments] = useState<Record<string, string>>({});
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -177,6 +196,7 @@ export function useFeedbackLoop({
       seededRef.current = initialResume;
       setResume(initialResume);
       setSelectedTheme(defaultTheme);
+      setPageMode(defaultPageMode);
       setComments({});
       setRound(0);
       setError(null);
@@ -186,7 +206,7 @@ export function useFeedbackLoop({
       setPosition(initialPosition);
       setValidationResult(null);
     }
-  }, [initialResume, initialCompany, initialPosition, defaultTheme]);
+  }, [initialResume, initialCompany, initialPosition, defaultTheme, defaultPageMode]);
 
   const setComment = useCallback((sectionId: string, value: string) => {
     setComments((prev) => ({ ...prev, [sectionId]: value }));
@@ -206,7 +226,7 @@ export function useFeedbackLoop({
     let cancelled = false;
     setIsPreviewLoading(true);
 
-    renderPreview(selectedTheme, resume)
+    renderPreview(selectedTheme, resume, pageMode)
       .then((html) => {
         if (cancelled) return;
         setPreviewHtml(html);
@@ -222,7 +242,7 @@ export function useFeedbackLoop({
     return () => {
       cancelled = true;
     };
-  }, [resume, selectedTheme, renderPreview]);
+  }, [resume, selectedTheme, pageMode, renderPreview]);
 
   // Collect non-empty comments as section+comment pairs.
   const pendingComments = useCallback((): SectionComment[] => {
@@ -334,6 +354,7 @@ export function useFeedbackLoop({
         company,
         position,
         themeName: selectedTheme,
+        pageMode,
       });
 
       if (!response.success) {
@@ -351,6 +372,7 @@ export function useFeedbackLoop({
         warning: response.pdfPath ? undefined : response.error,
       });
       onThemeValidated(selectedTheme);
+      onPageModeValidated(pageMode);
 
       if (response.pdfPath && !response.error && response.htmlPath) {
         onFullValidationSuccess?.({
@@ -372,8 +394,10 @@ export function useFeedbackLoop({
     company,
     position,
     selectedTheme,
+    pageMode,
     onValidated,
     onThemeValidated,
+    onPageModeValidated,
     onFullValidationSuccess,
     onClose,
   ]);
@@ -393,6 +417,8 @@ export function useFeedbackLoop({
     resume,
     selectedTheme,
     setSelectedTheme,
+    pageMode,
+    setPageMode,
     comments,
     previewHtml,
     isPreviewLoading,

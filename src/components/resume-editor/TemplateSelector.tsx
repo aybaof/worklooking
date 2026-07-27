@@ -4,12 +4,16 @@ import { useDebounce } from "@/lib/useDebounce";
 import { Check, Loader2 } from "lucide-react";
 import { Resume } from "@/../shared/resume-types";
 import { ThemeInfo } from "@/hooks/useTemplateSelection";
+import { PageMode } from "@/../shared/pageFit";
+import { PageModeToggle } from "@/components/feedback-loop/PageModeToggle";
 
 interface TemplateSelectorProps {
   resume: Resume;
   selectedTheme: string;
   availableThemes: ThemeInfo[];
   onSelectTheme: (themeId: string) => void;
+  pageMode: PageMode;
+  onSelectPageMode: (pageMode: PageMode) => void;
   renderPreview: (themeName: string, resume: Resume) => Promise<string>;
 }
 
@@ -131,6 +135,8 @@ export function TemplateSelector({
   selectedTheme,
   availableThemes,
   onSelectTheme,
+  pageMode,
+  onSelectPageMode,
   renderPreview,
 }: TemplateSelectorProps) {
   return (
@@ -140,6 +146,11 @@ export function TemplateSelector({
         Choisissez le modele utilise pour generer votre CV en HTML et PDF. Le
         modele selectionne sera aussi utilise par l'agent IA.
       </p>
+
+      <div className="mb-6 max-w-xs">
+        <p className="text-sm font-medium mb-2">Nombre de pages</p>
+        <PageModeToggle pageMode={pageMode} onChange={onSelectPageMode} />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {availableThemes.map((theme) => (

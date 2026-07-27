@@ -52,8 +52,25 @@ Rendering goes through `renderTheme(themeName, resumeData)` in the same file.
 
 ## PDF constraints
 
-Generated resumes target **one A4 page** (A4, scale 1.0, zero margins), handled by the
-app's PDF generation. Design `style.css` accordingly.
+Resumes are **multi-page by default**: content flows to its natural height across as
+many A4 pages as needed (A4, zero margins), via Chromium's `printToPDF` with
+`preferCSSPageSize: true`. One-page mode is an explicit, opt-in, JS-enforced user
+choice — implemented by `generatePdf`'s shrink-to-fit `executeJavaScript` snippet
+(`shared/pageFit.ts`), not by theme CSS. The same shrink-to-fit logic is duplicated,
+identically, in `PreviewFrame.tsx` (live preview) and `generatePdf` (exported PDF) so the
+two always match.
+
+For sidebar-split layouts (a theme with both a `.sidebar` and a `.main-content` element
+inside `.resume`, e.g. `modern-sidebar`), the one-page shrink applies only to
+`.main-content` — the sidebar column is pinned to exactly one A4 page height and stays
+unscaled, so it doesn't visually shrink along with the body. Themes without that
+structure keep the simple whole-`body`-scale behavior.
+
+Theme `style.css` must **not** reintroduce a fixed `height`/`overflow: hidden` clamp on
+`html`/`body`/a top-level layout container inside `@media print` — that clamp
+previously truncated multi-page PDF exports to page 1. New themes should let content
+flow naturally and rely on `.entry`-style `break-inside: avoid-page` rules for clean
+page breaks instead.
 
 ## Bundling
 
