@@ -14,6 +14,7 @@ Bundling and packaging are driven by **Electron Forge** with the **Vite plugin**
 | `make:all` | `electron-forge make` | All configured platforms |
 | `publish` | `electron-forge publish` | Publish (GitHub publisher) |
 | `clean` | `rm -rf .vite out dist dist-electron` | Remove build artifacts |
+| `generate:icon` | `tsx scripts/generate-icon.ts` | Regenerate `electron/icon.ico` (multi-resolution) |
 | `test` | `vitest run` | Run the full test suite once (node + renderer) |
 | `test:watch` | `vitest` | Test suite in watch mode |
 | `test:ui` | `vitest --ui` | Vitest browser UI |
@@ -61,6 +62,31 @@ Bundling and packaging are driven by **Electron Forge** with the **Vite plugin**
   → `WorkLookingAgent-Mac-AppleSilicon-X.Y.Z.zip`). It intentionally leaves
   Windows' `.nupkg`/`RELEASES` files untouched, since Squirrel's
   auto-updater matches those by their exact original filename.
+
+## App icon
+
+- **`electron/icon.ico`** is the single canonical source-of-truth app icon,
+  consumed by both `forge.config.js`'s `packagerConfig.icon` (the packaged
+  app/shortcut icon) and the Squirrel maker's `setupIcon` (the `Setup.exe`
+  installer icon).
+- It **must be a multi-resolution ICO** containing at minimum the 16x16,
+  32x32, 48x48, and 256x256 sizes, all 32bpp RGBA. A single-resolution
+  `.ico` is what previously caused the installed app, its Desktop/Start Menu
+  shortcuts, and its taskbar icon to fall back to the generic Electron icon
+  on Windows — do not reintroduce a single-resolution icon file. This is
+  enforced by an automated regression test, `tests/node/icon.test.ts`.
+- **Regenerate it** with `npm run generate:icon` (`tsx scripts/generate-icon.ts`),
+  which resamples the file's own existing embedded frame to the standard
+  sizes via `sharp` and hand-assembles a valid multi-frame ICO container (no
+  ICO-writing npm package is used or needed). Point the script at better
+  source art if any is ever added to the repo; as of now no higher-resolution
+  or vector source art exists, so the 256px frame is upsampled from the
+  original 128px image.
+- `assets/icon.ico` and `assets/icon.png` are **stray, unused, unwired
+  duplicates** of the old single-resolution icon (not referenced by
+  `forge.config.js` or any other source) — they are not the canonical file
+  and are intentionally left untouched; don't confuse them with
+  `electron/icon.ico`.
 
 ## Release automation
 
