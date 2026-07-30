@@ -82,11 +82,10 @@ Bundling and packaging are driven by **Electron Forge** with the **Vite plugin**
   source art if any is ever added to the repo; as of now no higher-resolution
   or vector source art exists, so the 256px frame is upsampled from the
   original 128px image.
-- `assets/icon.ico` and `assets/icon.png` are **stray, unused, unwired
-  duplicates** of the old single-resolution icon (not referenced by
-  `forge.config.js` or any other source) — they are not the canonical file
-  and are intentionally left untouched; don't confuse them with
-  `electron/icon.ico`.
+- `assets/icon.ico` and `assets/icon.png` were stray, unused, unwired
+  duplicates of the old single-resolution icon (not referenced by
+  `forge.config.js` or any other source) and have since been removed.
+  `electron/icon.ico` remains the only icon file in the repo.
 
 ## Release automation
 

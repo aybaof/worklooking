@@ -34,7 +34,6 @@
     "@tailwindcss/vite": "^4.1.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron-squirrel-startup": "^1.0.1",
     "framer-motion": "^12.29.0",
@@ -50,9 +49,7 @@
     "sharp": "^0.34.5",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
-    "update-electron-app": "^3.1.2",
-    "wait-on": "^9.0.3",
-    "zod": "^3.25.76"
+    "update-electron-app": "^3.1.2"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
@@ -79,9 +76,7 @@
     "electron": "^40.0.0",
     "flora-colossus": "^3.0.2",
     "jsdom": "^29.1.1",
-    "nodemon": "^3.1.11",
     "prettier": "^3.8.1",
-    "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
